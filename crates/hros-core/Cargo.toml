@@ -1,0 +1,17 @@
+[package]
+name = "hros-core"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS Bin glue + boot entry (replaces src/main.rs)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+hros-cap = { path = "../hros-cap" }
+hros-kernel = { path = "../hros-kernel" }
+hros-drivers = { path = "../hros-drivers" }
+hros-jit = { path = "../hros-jit" }
+
+[[bin]]
+name = "hros_kernel"
+path = "src/main.rs"

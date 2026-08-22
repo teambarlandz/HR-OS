@@ -1,0 +1,14 @@
+[package]
+name = "hros-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS Ring 0 core infrastructure (Phase 1) — memory, exec, interrupts"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+hros-cap = { path = "../hros-cap" }
+
+[lib]
+name = "hros_kernel"
+path = "src/lib.rs"

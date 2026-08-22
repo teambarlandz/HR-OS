@@ -1,0 +1,13 @@
+[package]
+name = "hros-arch-arm"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS ARM Cortex-M4/M7 HAL impl (43c switch, NVIC, Thumb-2)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+
+[lib]
+name = "hros_arch_arm"
+path = "src/lib.rs"

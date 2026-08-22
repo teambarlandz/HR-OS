@@ -1,0 +1,15 @@
+[package]
+name = "hros-jit"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS Single-pass streaming JIT (Phase 3B) — lexer, parser, emitters"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+hros-cap = { path = "../hros-cap" }
+hros-kernel = { path = "../hros-kernel" }
+
+[lib]
+name = "hros_jit"
+path = "src/lib.rs"

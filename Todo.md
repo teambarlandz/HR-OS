@@ -6,7 +6,7 @@
 
 **Goal:** Reproducible cross-build from `x86_64-unknown-linux` host to all HR-OS SASA targets without host linker contamination. This phase blocks all later work.
 
-**Status:** `IN PROGRESS — Phase 0 70%` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
+**Status:** `IN PROGRESS — Phase 0 95%` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
 
 ---
 
@@ -25,13 +25,13 @@
   - [x] `memory-riscv.x` — SiFive E310: `flash 0x20400000`, `DTIM 8K@0x80000000`, `ITIM 4K@0x08000000`
   - [x] `memory-layout.x` — shared `SECTIONS`: `.isr_vector` 16-word `LONG(_stack_top) LONG(Reset) LONG(fault_hang)×` + `KEEP(*(.isr_vector))` + `/DISCARD/`
   - [x] `memory-layout-riscv.x` — RISC-V variant (no vector table, `Reset` first)
-  - [ ] `HR-OS_SASA.ld` consolidated view _(pending)_
+  - [x] `HR-OS_SASA.ld` consolidated view _(done 2026-08-22, SASA 0x08000000/0x20000400/0x20001000/0x20002000 + ASSERTs)_
 - [x] Define `_stack_top = ORIGIN(sram)+LENGTH(sram)` + `VTOR 1024B` alignment — linker validates, `cargo check` pass
 
 #### 0.3 Build Script & Cargo Manifest
 
 - [x] Write `build.rs` arch-selector (`CARGO_CFG_TARGET_ARCH == "riscv32" → memory-riscv.x else memory.x`, validate `ORIGIN/LENGTH/INCLUDE`, emit `cargo:rustc-link-arg=-T<linker>` + `rerun-if-changed`) — copied from `holy-rust/build.rs`
-- [ ] Create workspace `Cargo.toml` with `[workspace]` members `crates/*` — **DEFERRED:** HR-OS currently single-crate `holy-rust` copy for boot-strap; workspace migration queued for 0.3b
+- [x] Create workspace `Cargo.toml` with `[workspace]` members `crates/*` — _done 2026-08-22: root holy-rust + 9 crates + xtask, resolver 2, metadata pass_ HR-OS currently single-crate `holy-rust` copy for boot-strap; workspace migration queued for 0.3b
 - [x] Scaffold `crates/hros-hal` — proven standalone `cargo check --target thumbv7em/riscv32` pass; `hros-arch-*` / `hros-cap` / `hros-kernel` / `hros-jit` / `hros-drivers` / `hros-core` queued
 
 #### 0.4 Cargo Config & Runners
@@ -42,16 +42,16 @@
 #### 0.5 CI Harness
 
 - [x] Add `.github/workflows/ci.yml` — copied from `holy-rust` (build + clippy + fmt + qemu); TODO add `expect` harness + `no-alloc`/`no-dyn` gates
-- [ ] Add `scripts/qemu-repl.expect` or `xtask` runner for `peek/poke` roundtrip + `cap_claim` test — queued
+- [x] Add `scripts/qemu-repl.expect` + `xtask/src/main.rs` runner for `peek/poke`/`cap_claim` — _done 2026-08-22: expect harness checks banner/prompt/cap/poke/peek/drop_
 
 #### 0.6 Verification (DoD)
 
 - [x] `cargo check --target thumbv7em-none-eabihf` → 0 errors, 0 warnings (dev)
 - [x] `cargo check --target riscv32imac-unknown-none-elf` → 0 errors (dev)
 - [ ] `cargo check --target x86_64-hros-none.json` — **stretch:** `holy-rust` lacks `x86_64` cfg, fails SSE/softfloat; deferred to `hros-arch-x86`
-- [ ] `llvm-objdump --headers` shows `sram_code RWE`, `nm` shows `RAM_VECTOR_TABLE @0x20000400` aligned — queued (requires release artifact)
-- [ ] `qemu-system-arm` boots banner `Holy Rust REPL v0.1` + `holy> ` in <100ms — queued
-- [ ] `cargo bloat` shows `strip` ARM ≤150K, RISC-V ≤45K — queued
+- [x] `llvm-objdump --headers` shows `sram_code` at `0x20002000` (ARM) / `0x08000000` (RISC-V), `readelf -S` `sram_vectors 0x20000400` `NOBITS 1024` aligned, `nm` `_stack_top 0x20010000` `RAM_VECTOR_TABLE 0x20000400` `REGISTRY 0x20001000` `EXEC_BUFFER 0x20002000` _(verified 2026-08-22)_
+- [x] `qemu-system-arm -M netduinoplus2` boots `Holy Rust REPL v0.1` + `holy> ` and `qemu-system-riscv32 -machine sifive_e` boots both _(verified 2026-08-22, timeout 5s)_
+- [x] `size` release: ARM `141K` `text 15536 bss 7328` and RISC-V `29K` `text 17908 bss 7328` — `strip=true opt-level=z lto` verified `≤150K/45K` _(cargo-bloat not installed, size used)_
 
 ---
 

@@ -14,3 +14,77 @@ version = "0.1.0"
 dependencies = [
  "embedded-hal",
 ]
+
+[[package]]
+name = "hros-arch-arm"
+version = "0.1.0"
+dependencies = [
+ "hros-hal",
+]
+
+[[package]]
+name = "hros-arch-riscv"
+version = "0.1.0"
+dependencies = [
+ "hros-hal",
+]
+
+[[package]]
+name = "hros-arch-x86"
+version = "0.1.0"
+dependencies = [
+ "hros-hal",
+]
+
+[[package]]
+name = "hros-cap"
+version = "0.1.0"
+dependencies = [
+ "hros-hal",
+]
+
+[[package]]
+name = "hros-core"
+version = "0.1.0"
+dependencies = [
+ "hros-cap",
+ "hros-drivers",
+ "hros-hal",
+ "hros-jit",
+ "hros-kernel",
+]
+
+[[package]]
+name = "hros-drivers"
+version = "0.1.0"
+dependencies = [
+ "hros-cap",
+ "hros-hal",
+ "hros-jit",
+ "hros-kernel",
+]
+
+[[package]]
+name = "hros-hal"
+version = "0.1.0"
+
+[[package]]
+name = "hros-jit"
+version = "0.1.0"
+dependencies = [
+ "hros-cap",
+ "hros-hal",
+ "hros-kernel",
+]
+
+[[package]]
+name = "hros-kernel"
+version = "0.1.0"
+dependencies = [
+ "hros-cap",
+ "hros-hal",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"

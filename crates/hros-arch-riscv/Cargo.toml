@@ -1,0 +1,13 @@
+[package]
+name = "hros-arch-riscv"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS RISC-V RV32IMAC/RV64 HAL impl (fence.i, mtvec)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+
+[lib]
+name = "hros_arch_riscv"
+path = "src/lib.rs"

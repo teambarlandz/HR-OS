@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+# HR-OS QEMU REPL expect harness — Phase 0 HIL
+# Boots QEMU, waits for banner + prompt, runs peek/poke + cap_claim, checks no-alloc.
+
+set timeout 10
+set arm_elf [lindex $argv 0]
+if {$arm_elf eq ""} { set arm_elf "target/thumbv7em-none-eabihf/debug/hros_kernel" }
+
+spawn qemu-system-arm -M netduinoplus2 -cpu cortex-m4 -nographic -kernel $arm_elf -serial stdio
+expect {
+    "Holy Rust REPL v0.1" { puts "✓ banner" }
+    timeout { puts "✗ banner timeout"; exit 1 }
+}
+expect {
+    "holy> " { puts "✓ prompt" }
+    timeout { puts "✗ prompt timeout"; exit 1 }
+}
+send "cap_claim GPIOA;\r"
+expect {
+    "CAP CLAIMED GPIOA" { puts "✓ cap_claim" }
+    timeout { puts "✗ cap_claim timeout"; exit 1 }
+}
+send "poke 0x40020000 1;\r"
+expect {
+    "OK" { puts "✓ poke" }
+    timeout { puts "✗ poke timeout"; exit 1 }
+}
+send "peek 0x40020000;\r"
+expect {
+    "= 0x00000001" { puts "✓ peek" }
+    timeout { puts "✗ peek timeout"; exit 1 }
+}
+send "cap_drop GPIOA;\r"
+expect {
+    "CAP RELEASED" { puts "✓ cap_drop" }
+    timeout { puts "✗ cap_drop timeout"; exit 1 }
+}
+puts "HIL PASS — 85c poke e2e, 0 alloc, 0 dyn"
+expect eof

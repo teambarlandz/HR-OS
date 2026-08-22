@@ -19,3 +19,15 @@ codegen-units = 1       # Single thread for maximum LTO optimization
 panic = "abort"         # Strip unwind tables
 strip = true            # Strip all symbols from final release binary
 debug = false           # No debug info
+
+[workspace]
+members = ["crates/*", "xtask"]
+resolver = "2"
+
+[workspace.dependencies]
+embedded-hal = "1.0"
+hros-hal = { path = "crates/hros-hal" }
+hros-cap = { path = "crates/hros-cap" }
+hros-kernel = { path = "crates/hros-kernel" }
+hros-jit = { path = "crates/hros-jit" }
+hros-drivers = { path = "crates/hros-drivers" }

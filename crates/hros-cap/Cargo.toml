@@ -1,0 +1,13 @@
+[package]
+name = "hros-cap"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS O(1) linear capability engine (Phase 2B) — bitfield registry + linear tokens"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+
+[lib]
+name = "hros_cap"
+path = "src/lib.rs"

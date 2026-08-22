@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS xtask — qemu, fuzz, bench runners"
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]

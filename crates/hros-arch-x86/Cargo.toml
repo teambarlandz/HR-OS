@@ -1,0 +1,13 @@
+[package]
+name = "hros-arch-x86"
+version = "0.1.0"
+edition = "2021"
+description = "HR-OS x86_64 bare-metal HAL impl (APIC, AVX2 VANDPS)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hros-hal = { path = "../hros-hal" }
+
+[lib]
+name = "hros_arch_x86"
+path = "src/lib.rs"
