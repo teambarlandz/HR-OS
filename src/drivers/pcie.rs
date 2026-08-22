@@ -17,17 +17,17 @@ pub fn ecam_addr(base: usize, bus: u8, dev: u8, func: u8, reg: usize) -> usize {
 /// PCIe device header (Type 00h) — first 64 bytes
 #[repr(C)]
 pub struct PcieHeader {
-    pub vendor_device: u32, // 0x00: vendor 16 + device 16
-    pub command_status: u32, // 0x04
-    pub class_revision: u32, // 0x08
+    pub vendor_device: u32,             // 0x00: vendor 16 + device 16
+    pub command_status: u32,            // 0x04
+    pub class_revision: u32,            // 0x08
     pub bist_header_latency_cache: u32, // 0x0C
-    pub bar0: u32, // 0x10
-    pub bar1: u32, // 0x14
-    pub bar2: u32, // 0x18
-    pub bar3: u32, // 0x1C
-    pub bar4: u32, // 0x20
-    pub bar5: u32, // 0x24
-    // ... rest omitted
+    pub bar0: u32,                      // 0x10
+    pub bar1: u32,                      // 0x14
+    pub bar2: u32,                      // 0x18
+    pub bar3: u32,                      // 0x1C
+    pub bar4: u32,                      // 0x20
+    pub bar5: u32,                      // 0x24
+                                        // ... rest omitted
 }
 
 /// BAR sizing: write all 1s, read back mask, restore, compute size `~(mask & !0xF) + 1`
@@ -37,8 +37,7 @@ pub fn bar_size(bar_addr: usize) -> usize {
     crate::kernel::memory::poke_u32(bar_addr, 0xFFFFFFFF);
     let mask = crate::kernel::memory::peek_u32(bar_addr);
     crate::kernel::memory::poke_u32(bar_addr, orig);
-    let size = (!((mask as usize) & !0xF)) + 1;
-    size
+    (!((mask as usize) & !0xF)) + 1
 }
 
 /// Enumerate ECAM bus: O(N) sweep, returns number of devices found
@@ -76,7 +75,9 @@ pub fn enumerate_ecam(base: usize, out: &mut [PcieHeader; 32]) -> usize {
                 }
             }
         }
-        if found >= out.len() { break; }
+        if found >= out.len() {
+            break;
+        }
         if bus == 0 && found == 0 {
             // Quick exit for QEMU without PCIe (netduino/sifive have no ECAM)
             break;
@@ -93,10 +94,10 @@ pub fn enumerate_ecam(base: usize, out: &mut [PcieHeader; 32]) -> usize {
 #[derive(Copy, Clone)]
 #[repr(C, align(64))]
 pub struct DmaDescriptor {
-    pub src_addr: u64,      // Physical source (SASA)
-    pub dest_addr: u64,     // Physical dest MMIO/RAM
-    pub length: u32,        // Bytes
-    pub flags: u32,         // Ready, EOR, IOC
+    pub src_addr: u64,  // Physical source (SASA)
+    pub dest_addr: u64, // Physical dest MMIO/RAM
+    pub length: u32,    // Bytes
+    pub flags: u32,     // Ready, EOR, IOC
 }
 
 /// Autonomous DMA ring — lock-free SPSC, head = HW, tail = driver
@@ -110,7 +111,12 @@ pub struct AutonomousDmaRing {
 impl AutonomousDmaRing {
     pub const fn new() -> Self {
         Self {
-            descriptors: [DmaDescriptor { src_addr: 0, dest_addr: 0, length: 0, flags: 0 }; 128],
+            descriptors: [DmaDescriptor {
+                src_addr: 0,
+                dest_addr: 0,
+                length: 0,
+                flags: 0,
+            }; 128],
             head: AtomicU32::new(0),
             tail: AtomicU32::new(0),
         }
@@ -118,15 +124,22 @@ impl AutonomousDmaRing {
 
     /// Enqueue zero-copy transfer — O(1), 0 blocked CPU (async TLP)
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc, clippy::result_unit_err)]
     pub unsafe fn submit_transfer(&self, src: u64, dest: u64, len: u32) -> Result<(), ()> {
         let cur_tail = self.tail.load(Ordering::Relaxed);
         let next_tail = (cur_tail + 1) % 128;
         if next_tail == self.head.load(Ordering::Acquire) {
             return Err(()); // Ring full
         }
-        let desc_ptr = unsafe { self.descriptors.as_ptr().add(cur_tail as usize) } as *mut DmaDescriptor;
+        let desc_ptr =
+            unsafe { self.descriptors.as_ptr().add(cur_tail as usize) } as *mut DmaDescriptor;
         unsafe {
-            (*desc_ptr) = DmaDescriptor { src_addr: src, dest_addr: dest, length: len, flags: 0x01 };
+            (*desc_ptr) = DmaDescriptor {
+                src_addr: src,
+                dest_addr: dest,
+                length: len,
+                flags: 0x01,
+            };
             // Ensure descriptor write completes before tail update (Release)
             core::sync::atomic::compiler_fence(Ordering::Release);
         }
@@ -146,6 +159,12 @@ impl AutonomousDmaRing {
         let head = self.head.load(Ordering::Acquire) as usize;
         let tail = self.tail.load(Ordering::Acquire) as usize;
         (head + 128 - tail - 1) % 128
+    }
+}
+
+impl Default for AutonomousDmaRing {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

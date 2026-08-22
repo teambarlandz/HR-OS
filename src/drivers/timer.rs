@@ -20,6 +20,7 @@ pub mod arm {
 
     /// Configure SysTick for `ticks` reload, returns ticks
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn configure(ticks: u32) {
         unsafe {
             core::ptr::write_volatile(STK_LOAD as *mut u32, ticks);
@@ -36,6 +37,7 @@ pub mod riscv {
     pub const MTIME: usize = 0x0200BFF8;
     pub const MTIMECMP: usize = 0x02004000;
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn configure(_ticks: u32) {
         unsafe { core::arch::asm!("fence.i", options(nostack)) }
     }
