@@ -17,13 +17,13 @@ pub fn t_cap(n_accesses: usize, vector: bool) -> usize {
 /// Context switch bound: 43c (12 auto +8 push +3 sched +8 pop +12 unstack)
 pub const T_CTX: usize = 43;
 
-/// Execution bound: Σ BB_cost * bound (example)
+/// Execution bound: Σ BB_cost * bound
 #[inline(always)]
 pub fn t_exec(bb_costs: &[usize], bounds: &[usize]) -> usize {
     bb_costs.iter().zip(bounds.iter()).map(|(c, b)| c * b).sum()
 }
 
-/// Total WCET E(Ti)
+/// Total WCET E(Ti) = T_JIT(S) + T_Cap + T_Exec + T_Ctx
 #[inline(always)]
 pub fn total_wcet(
     s_bytes: usize,
@@ -59,6 +59,7 @@ pub fn rta_response_time(w_ti: usize, higher: &[(usize, usize)], deadline: usize
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn wcet_ledger() {
         // Example: S=64B, N=10, vector, 2 BBs
@@ -66,6 +67,7 @@ mod tests {
         // T_JIT 64*25=1600, T_Cap 10*1=10, T_Exec 10*5+20*3=110, T_Ctx 43 => 1763
         assert_eq!(e, 1600 + 10 + 110 + 43);
     }
+
     #[test]
     fn rta_schedulable() {
         // 3 tasks: T1 W=10 P=50 D=50, T2 W=20 P=100 D=100, T3 W=30 P=200 D=200
@@ -76,6 +78,7 @@ mod tests {
         assert_eq!(rta_response_time(20, &[(10, 50)], 100), Some(30));
         assert_eq!(rta_response_time(30, &[(10, 50), (20, 100)], 200), Some(70));
     }
+
     #[test]
     fn rta_unschedulable() {
         // T1 W=40 P=50, T2 W=20 P=100 D=50 -> T2 needs 20+40=60 >50

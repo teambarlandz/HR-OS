@@ -5,13 +5,6 @@
 //! the Milestone 4 "JIT" path — for expressions too simple to justify the
 //! threaded dispatch overhead.
 //!
-//! # Limitations (v1)
-//!
-//! The compiler uses a **two-register** strategy (accumulator + scratch)
-//! which handles all single-level binary expressions. Nested expressions
-//! like `2 + 3 * 4` fall back to the threaded interpreter; only streams
-//! matching the pattern `lit [op lit]* [load|store] halt` are compiled.
-//!
 //! # Register allocation
 //!
 //! | Target  | Accumulator | Scratch | Return |
@@ -19,19 +12,18 @@
 //! | ARM     | r0          | r1      | r0     |
 //! | RISC-V  | a0 (x10)    | a1 (x11)| a0     |
 
-#[cfg(not(target_arch = "riscv32"))]
+#[cfg(target_arch = "arm")]
 use crate::compiler::emitter::TargetEmitter;
-#[cfg(not(target_arch = "riscv32"))]
+#[cfg(target_arch = "arm")]
 use crate::compiler::primitives;
-#[cfg(not(target_arch = "riscv32"))]
+#[cfg(target_arch = "arm")]
 use crate::kernel::exec::{exec_buffer_entry, jump_to_sram};
 
-/// Target-specific accumulator and scratch register numbers.
+/// Target-specific accumulator and scratch register numbers for ARM Thumb-2.
 #[cfg(target_arch = "arm")]
-#[cfg(not(target_arch = "riscv32"))]
 mod regs {
-    pub const ACC: u8 = 0; // r0
-    pub const SCRATCH: u8 = 1; // r1
+    pub const ACC: u8 = 0; // r0: Accumulator register
+    pub const SCRATCH: u8 = 1; // r1: Scratch register
 }
 
 /// Compile a threaded token stream into native code in EXEC_BUFFER and
@@ -53,10 +45,10 @@ pub unsafe fn compile_and_run(
     len: usize,
     yields_value: bool,
 ) -> Result<Option<u32>, ()> {
-    // RISC-V: LLD emits the ITIM section in a RW-only PT_LOAD segment;
-    // QEMU's sifive_e enforces execute-permission on PT_LOAD, so native
-    // codegen faults.  Fall back to threaded until the ELF is patched
-    // (see build.rs post-link step, or switch to GNU ld).
+    // RISC-V: LLD emits the ITIM (.sram_code) section inside a RW-only
+    // PT_LOAD segment; QEMU's sifive_e PMP enforces execute permission,
+    // so native dispatch faults. Fall back to threaded until the ELF is
+    // patched (objcopy --set-section-flags or GNU ld PHDRS).
     #[cfg(target_arch = "riscv32")]
     {
         let _ = (stream, len, yields_value);
@@ -65,11 +57,12 @@ pub unsafe fn compile_and_run(
 
     #[cfg(not(target_arch = "riscv32"))]
     {
-        // Quick complexity check: scan for illegal patterns.
+        // Quick complexity check: scan for illegal patterns or unsupported operations.
         if !is_compilable(stream, len) {
             return Err(());
         }
 
+        // Instantiate target-specific single-pass emitter directly into EXEC_BUFFER.
         #[cfg(target_arch = "arm")]
         let mut em = unsafe { crate::compiler::emitter::Thumb2Emitter::into_exec_buffer() };
         #[cfg(target_arch = "riscv32")]
@@ -78,16 +71,17 @@ pub unsafe fn compile_and_run(
         let mut ip = 0;
         let mut acc_loaded = false;
 
+        // Stream consumption loop: O(n) single pass
         while ip < len {
             let word = stream[ip];
             ip += 1;
 
             if word == 0 {
-                break; // defensive stop
+                break; // Defensive stop on zero word
             }
 
             if word == word_of(primitives::halt_prim) {
-                break;
+                break; // Terminal primitive reached
             }
 
             if word == word_of(primitives::lit_prim) {
@@ -108,9 +102,11 @@ pub unsafe fn compile_and_run(
                     // Address goes to SCRATCH (load/store read from there).
                     em.emit_mov_imm(regs::SCRATCH, val).map_err(|_| ())?;
                 } else if !acc_loaded {
+                    // First literal in expression loads into ACC.
                     em.emit_mov_imm(regs::ACC, val).map_err(|_| ())?;
                     acc_loaded = true;
                 } else {
+                    // Subsequent operands load into SCRATCH.
                     em.emit_mov_imm(regs::SCRATCH, val).map_err(|_| ())?;
                 }
             } else if word == word_of(primitives::add_prim) {
@@ -135,7 +131,7 @@ pub unsafe fn compile_and_run(
                 acc_loaded = true;
             } else if word == word_of(primitives::write_reg_prim) {
                 // ACC holds the address (from first lit), SCRATCH holds the
-                // value (from second lit).  Store SCRATCH → *ACC.
+                // value (from second lit). Store SCRATCH → *ACC.
                 em.emit_store_u32(regs::SCRATCH, regs::ACC)
                     .map_err(|_| ())?;
             } else {
@@ -144,10 +140,10 @@ pub unsafe fn compile_and_run(
             }
         }
 
-        // Ensure there's a return instruction.
+        // Ensure there's a target-specific return instruction (BX LR / JALR).
         em.emit_ret().map_err(|_| ())?;
 
-        // Execute.
+        // Hardware execution jump into EXEC_BUFFER.
         let entry = exec_buffer_entry();
         let result = jump_to_sram(entry);
 
@@ -161,7 +157,7 @@ pub unsafe fn compile_and_run(
 
 /// Check whether a threaded stream matches the compilable pattern:
 /// `lit [op lit]* [load|store] halt` using only known primitives.
-#[cfg(not(target_arch = "riscv32"))]
+#[cfg(target_arch = "arm")]
 fn is_compilable(stream: &[usize; crate::compiler::parser::MAX_STREAM_WORDS], len: usize) -> bool {
     let lit_w = word_of(primitives::lit_prim);
     let halt_w = word_of(primitives::halt_prim);
@@ -196,7 +192,7 @@ fn is_compilable(stream: &[usize; crate::compiler::parser::MAX_STREAM_WORDS], le
 }
 
 /// Cast a [`MicroPrimitive`] function pointer to `usize` for comparison.
-#[cfg(not(target_arch = "riscv32"))]
+#[cfg(target_arch = "arm")]
 fn word_of(f: primitives::MicroPrimitive) -> usize {
     f as usize
 }

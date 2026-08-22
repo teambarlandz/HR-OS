@@ -3,15 +3,18 @@
   "cpu": "x86-64",
   "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
   "disable-redzone": true,
-  "features": "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2,+soft-float",
+  /* Disabled vector/MMX features to prevent implicit vector register usage in bare-metal no_std. */
+  /* Crucially removed '+soft-float' to avoid System V ABI conflicts with 128/256-bit return types. */
+  "features": "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2",
   "linker": "rust-lld",
   "linker-flavor": "ld.lld",
   "llvm-target": "x86_64-unknown-none-elf",
   "max-atomic-width": 64,
   "panic-strategy": "abort",
+  /* Enforce standard integer type for pointer width to resolve target spec JSON deserialization errors */
   "target-pointer-width": 64,
   "target-c-int-width": 32,
   "os": "none",
-  "executables": true,
-  "rustc-abi": "softfloat"
+  "executables": true
+  /* Removed invalid 'rustc-abi': 'softfloat' key which triggered LLVM 'SSE register return with SSE disabled' errors */
 }
