@@ -33,8 +33,8 @@ impl irq::InterruptController for ArmNvic {
     fn is_nmi(_slot: usize) -> bool { false }
 }
 impl cap::VectorCapabilityEngine for ArmCapEngine {
-    fn verify_scalar(_addr: u32, _base: *const u64) -> bool { true }
-    fn verify_vector(_addr: u32, _mask: cap::Mask256, _base: *const u64) -> bool { true }
+    unsafe fn verify_scalar(_addr: u32, _base: *const u64) -> bool { true }
+    unsafe fn verify_vector(_addr: u32, _mask: cap::Mask256, _base: *const u64) -> bool { true }
     fn build_mask(_addr: u32, _len: usize) -> Option<cap::Mask256> { None }
     fn addr_to_cap(_addr: u32) -> Option<cap::CapId> { None }
     fn acquire(_id: cap::CapId) -> bool { false }

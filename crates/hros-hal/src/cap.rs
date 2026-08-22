@@ -20,12 +20,18 @@ pub trait VectorCapabilityEngine: Sized {
     const CYCLES_VECTOR: usize = 1;
 
     /// Scalar predicate `P(addr,C)` : bit-test one 4 KiB block.
-    fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool;
+    ///
+    /// # Safety
+    /// `vcap_base` must be 4×u64 window base.
+    unsafe fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool;
 
     /// Vector predicate for contiguous `len` blocks starting at `addr` (len ≤256).
     /// `mask` encodes the N requested bits. Returns true iff all required bits set.
     /// Must use 256-bit vector ALU when available (AVX2 VANDPS+VPTEST / NEON).
-    fn verify_vector(addr: u32, mask: Mask256, vcap_base: *const u64) -> bool;
+    ///
+    /// # Safety
+    /// `vcap_base` must be 4×u64 window base, 32B aligned.
+    unsafe fn verify_vector(addr: u32, mask: Mask256, vcap_base: *const u64) -> bool;
 
     /// Build `Mask256` for `[addr, addr+len*4096)`. Returns None if `len>256`.
     fn build_mask(addr: u32, len: usize) -> Option<Mask256>;

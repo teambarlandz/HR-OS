@@ -36,7 +36,7 @@ pub fn build_mask(addr: u32, len: usize) -> Option<Mask256> {
 
 /// Scalar predicate P(addr,C) — 3c (1 LSR + 1 LDR + 1 TBZ)
 #[inline(always)]
-pub fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool {
+pub unsafe fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool {
     let k = (addr >> 12) as usize;
     let off = k & 255; // within window
     let word = off >> 6;
@@ -45,8 +45,11 @@ pub fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool {
 }
 
 /// Vector predicate — 1c for 256 bits: (Vcap & Mreq) == Mreq
+///
+/// # Safety
+/// `vcap_base` must be 4×u64 window base, 32B aligned.
 #[inline(always)]
-pub fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
+pub unsafe fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
     unsafe {
         let v = core::slice::from_raw_parts(vcap_base, 4);
         let m = mask.0;
@@ -79,7 +82,7 @@ pub mod registry {
             let window_base = ((addr >> 12) as usize) & !255;
             let u32_word = window_base >> 5;
             let u64_base = unsafe { REGISTRY_BITS.0.as_ptr().add(u32_word) as *const u64 };
-            verify_vector(addr, mask, u64_base)
+            unsafe { verify_vector(addr, mask, u64_base) }
         } else {
             // scalar fallback
             for off in 0..len {

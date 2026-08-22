@@ -28,14 +28,14 @@ impl irq::InterruptController for X86Irq {
 }
 
 impl VectorCapabilityEngine for X86CapEngine {
-    fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool {
+    unsafe fn verify_scalar(addr: u32, vcap_base: *const u64) -> bool {
         let k = (addr >> 12) as usize;
         let off = k & 255;
         let word = off >> 6;
         let bit = off & 63;
         unsafe { (*vcap_base.add(word) >> bit) & 1 == 1 }
     }
-    fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
+    unsafe fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
         // SAFETY: vcap_base is 4×u64 window base, 32B aligned.
         // On x86_64 with AVX2, use 256-bit vector ALU (1c VANDPS+VPTEST).
         #[cfg(target_arch = "x86_64")]

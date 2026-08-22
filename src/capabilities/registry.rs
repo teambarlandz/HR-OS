@@ -249,9 +249,12 @@ pub fn verify_scalar(addr: u32) -> bool {
 
 /// Vector predicate for contiguous `len` blocks — 1c for 256 blocks.
 /// `authorized = (Vcap & Mreq) == Mreq` across 4×u64.
-/// `vcap_base` must point to window base `&REGISTRY_BITS.0[window_base/32]` as `*const u64`.
+///
+/// # Safety
+/// `vcap_base` must point to a valid 4×u64 window base, 32B aligned, and remain valid for the call.
+/// Caller must ensure the window base corresponds to `addr & !255` blocks.
 #[inline(always)]
-pub fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
+pub unsafe fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
     // SAFETY: vcap_base is 4×u64 window base, 32B aligned (Mask256 align 32).
     // For host tests, caller may pass &REGISTRY_BITS as *const u64 with window_base=0.
     unsafe {
@@ -260,7 +263,10 @@ pub fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
         // Scalar loop over 4 — on x86_64 with AVX2 this optimizes to VANDPS+VPTEST
         // when compiled with `target-feature=+avx2` (see hros-arch-x86).
         // For Phase 2, this is the portable 1c-equivalent fallback.
-        (vcap[0] & m[0] == m[0]) && (vcap[1] & m[1] == m[1]) && (vcap[2] & m[2] == m[2]) && (vcap[3] & m[3] == m[3])
+        (vcap[0] & m[0] == m[0])
+            && (vcap[1] & m[1] == m[1])
+            && (vcap[2] & m[2] == m[2])
+            && (vcap[3] & m[3] == m[3])
     }
 }
 
@@ -281,7 +287,7 @@ pub fn verify_range_contiguous(addr: u32, len: usize) -> Result<(), CapId> {
         // Convert registry as u64 window base: word = window_base/32, as u64 index = word/2
         let u32_word = window_base >> 5;
         let u64_base = unsafe { REGISTRY_BITS.0.as_ptr().add(u32_word) as *const u64 };
-        if verify_vector(addr, mask, u64_base) {
+        if unsafe { verify_vector(addr, mask, u64_base) } {
             return Ok(());
         } else {
             // Find first missing to report CapId (scalar scan for error detail)
@@ -291,7 +297,8 @@ pub fn verify_range_contiguous(addr: u32, len: usize) -> Result<(), CapId> {
                     if !is_claimed(cap as usize) {
                         return Err(cap);
                     }
-                } else if !matches!(a, 0x0800_0000..=0x080F_FFFF | 0x2000_0000..=0x2001_C000 | 0x8000_0000..=0x8000_FFFF) {
+                } else if !matches!(a, 0x0800_0000..=0x080F_FFFF | 0x2000_0000..=0x2001_C000 | 0x8000_0000..=0x8000_FFFF)
+                {
                     // Host fallback: on x86_64 host, treat unmapped as SuperUser
                     if !is_claimed(CapId::SuperUser as usize) {
                         return Err(CapId::SuperUser);
@@ -312,10 +319,16 @@ pub fn verify_range_contiguous(addr: u32, len: usize) -> Result<(), CapId> {
 // Host fallback for addr_to_cap_id when not on arm/riscv32 (for cargo test on x86_64)
 #[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
 #[inline(always)]
-fn arm_addr_to_cap(_addr: u32) -> Option<CapId> { None }
+fn arm_addr_to_cap(_addr: u32) -> Option<CapId> {
+    None
+}
 #[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
 #[inline(always)]
-fn riscv_addr_to_cap(_addr: u32) -> Option<CapId> { None }
+fn riscv_addr_to_cap(_addr: u32) -> Option<CapId> {
+    None
+}
 #[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
 #[inline(always)]
-pub fn addr_to_cap_id(_addr: u32) -> Option<CapId> { None }
+pub fn addr_to_cap_id(_addr: u32) -> Option<CapId> {
+    None
+}

@@ -471,7 +471,11 @@ impl TargetEmitter for Riscv32Emitter {
         let opcode: u32 = 0b0001011; // Custom-0
         let funct3: u32 = 0b000;
         let funct7: u32 = 0b0000001;
-        let raw = (funct7 << 25) | ((cap_reg as u32 & 0x1F) << 20) | ((addr_reg as u32 & 0x1F) << 15) | (funct3 << 12) | opcode;
+        let raw = (funct7 << 25)
+            | ((cap_reg as u32 & 0x1F) << 20)
+            | ((addr_reg as u32 & 0x1F) << 15)
+            | (funct3 << 12)
+            | opcode;
         self.push32(raw)
     }
 }
