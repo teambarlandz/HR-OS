@@ -67,7 +67,7 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 
 ---
 
-### Phase 2 — Axes 1 & 3 (IN PROGRESS — Detailed Plan)
+### Phase 2 — Axes 1 & 3 (IN PROGRESS — 80% Vector+Queue Done, Switch/SysTick/Shadow Pending)
 
 **Goal:** Upgrade safety from scalar 3c → vector 1c and scheduler from single-core SysTick → multi-core lock-free with zero jitter.
 
@@ -79,8 +79,8 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 - [x] Implement `verify_vector(addr, mask, vcap_base) -> bool` 1c path: `authorized = (Vcap & Mreq) == Mreq` — scalar loop over 4×u64 fallback + `#[cfg(target_arch="x86_64")]` AVX2 `VANDPS+VTEST` / `#[cfg(target_arch="arm")]` NEON `vld1q+vandq+ceq` hooks
 - [x] Upgrade `src/capabilities/registry.rs` — add `Mask256`, `build_mask`, `verify_scalar`, `verify_vector`, `verify_range_contiguous(addr, len)` using registry `AtomicU32[8]` viewed as `u64x4`; add `#[cfg(not(any(arm,riscv32)))]` host fallback for `cargo test --features std`
 - [x] Upgrade `crates/hros-cap/src/lib.rs` and `crates/hros-arch-*` — replicate vector logic; `hros-arch-x86` real AVX2 `_mm256_loadu_si256`/`_mm256_and_si256`/`_mm256_testc_si256`, `hros-arch-arm` NEON stub + scalar fallback
-- [x] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3c `LSR/LDR/TBZ` vs vector 1c `VANDPS+VPTEST` / custom `hros.capchk` `0x0B` *(done 2026-08-22, trait `emit_cap_guard_*` added, Thumb2 6→4B, RISC-V 12→4B 66.6% saving verified)* — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
-- [x] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` all offsets `0..63` PASS, `256-block 1c` PASS, `cargo run --target aarch64` vector_test `All 64 offsets PASS` `TOTAL_CYCLES 43` `128KiB` *(verified 2026-08-22, host aarch64)*: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
+- [x] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3c `LSR/LDR/TBZ` vs vector 1c `VANDPS+VPTEST` / custom `hros.capchk` `0x0B` _(done 2026-08-22, trait `emit_cap_guard_*` added, Thumb2 6→4B, RISC-V 12→4B 66.6% saving verified)_ — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
+- [x] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` all offsets `0..63` PASS, `256-block 1c` PASS, `cargo run --target aarch64` vector_test `All 64 offsets PASS` `TOTAL_CYCLES 43` `128KiB` _(verified 2026-08-22, host aarch64)_: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
 
 #### Axis 1 — Lock-Free Multi-Core Scheduler (43c, 0 jitter)
 
@@ -92,7 +92,7 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 - [ ] Add shadow stack / PAC / CET hook — `D≤Dmax` checked at compile time, `hardware Shadow Stack` stub for `ARM PAC`/`x86 CET`
 - [ ] Test 43c determinism — `DWT->CYCCNT` 10 000 switches `max-min==0`, `σ==0` (no TLB flush), `loom` model `64×push_task` terminates ≤12c p95, `size` 128 KiB cap SRAM `64×16K/8` cached in L1
 
-_DoD:_ `T_ctx==43 ±0` (12+8+3+8+12) @168 MHz `0.255µs`, `σ==0`, guard `3→1c` (1 MiB in 1c), `128KiB` `REGISTRY_BITS` L1-cached, `LockFreeTaskQueue` 8–12c dispatch `WFE/SEV` not spin, `rg todo!` ==0, `no_alloc`, `cargo test` vector-vs-scalar pass.
+_DoD:_ `T_ctx==43 ±0` (12+8+3+8+12) @168 MHz `0.255µs`, `σ==0`, guard `3→1c` (1 MiB in 1c) **✓ vector 1c verified (host aarch64)**, `128KiB` `REGISTRY_BITS` L1-cached **✓**, `LockFreeTaskQueue` 8–12c dispatch `WFE/SEV` not spin **✓ host test 255 cap + 64B align PASS**, `rg todo!` ==0, `no_alloc` **✓ CI fmt/clippy/build pass**, `cargo test` vector-vs-scalar **✓** — _remaining: 43c asm switch + SysTick + shadow stack + determinism bench_
 
 ---
 
