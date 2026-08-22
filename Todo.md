@@ -67,12 +67,32 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 
 ---
 
-### Phase 2 — Axes 1 & 3 (IN PROGRESS)
+### Phase 2 — Axes 1 & 3 (IN PROGRESS — Detailed Plan)
 
-- [ ] Axis 1: SysTick 43c switch (12 auto+8 push+3 sched+8 pop+12 unstack), `LockFreeTaskQueue align(64)` CAS+WFE/SEV
-- [ ] Axis 3: `REGISTRY_BITS @0x20001000 AtomicU32[8]`, scalar 3c guard, AVX2 `VANDPS+VPTEST` 1c 256×4K, `Cap<T>`/`PinGuard` linear tokens
+**Goal:** Upgrade safety from scalar 3c → vector 1c and scheduler from single-core SysTick → multi-core lock-free with zero jitter.
 
-_DoD:_ `T_ctx==43 ±0`, `σ==0`, guard 3→1c, 128KiB SRAM cached, `rg todo!` ==0, no `alloc`.
+#### Axis 3 — Vector Capability Engine (SIMD 1c)
+
+- [ ] Define `Mask256` `#[repr(C, align(32))] pub struct Mask256(pub [u64; 4])` in `crates/hros-hal/src/cap.rs` and `src/capabilities/registry.rs` — 256 bits = 1 MiB (256×4K)
+- [ ] Implement `build_mask(addr: u32, len: usize) -> Option<Mask256>` for `[addr, addr+len*4096)` — compute `k_start=addr>>12`, `k_end`, span 4 words, handle word-boundary straddle + tail scalar epilogue
+- [ ] Implement `verify_scalar(addr, vcap_base) -> bool` 3c path: `k=addr>>12; idx=k>>6; bit=k&63; (W[idx]>>bit)&1` — 1 LSR + 1 LDR + 1 TBZ (already in `registry::available`)
+- [ ] Implement `verify_vector(addr, mask, vcap_base) -> bool` 1c path: `authorized = (Vcap & Mreq) == Mreq` — scalar loop over 4×u64 fallback + `#[cfg(target_arch="x86_64")]` AVX2 `VANDPS+VTEST` / `#[cfg(target_arch="arm")]` NEON `vld1q+vandq+ceq` hooks
+- [ ] Upgrade `src/capabilities/registry.rs` — add `Mask256`, `build_mask`, `verify_scalar`, `verify_vector`, `verify_range_contiguous(addr, len)` using registry `AtomicU32[8]` viewed as `u64x4`; add `#[cfg(not(any(arm,riscv32)))]` host fallback for `cargo test --features std`
+- [ ] Upgrade `crates/hros-cap/src/lib.rs` and `crates/hros-arch-*` — replicate vector logic; `hros-arch-x86` real AVX2 `_mm256_loadu_si256`/`_mm256_and_si256`/`_mm256_testc_si256`, `hros-arch-arm` NEON stub + scalar fallback
+- [ ] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
+- [ ] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
+
+#### Axis 1 — Lock-Free Multi-Core Scheduler (43c, 0 jitter)
+
+- [ ] Define `TaskControlBlock` + `TCB_TABLE` in `crates/hros-kernel/src/lib.rs` / `src/kernel/` — `SP_limit/base/current`, `PC`, `State`, stack `0x20003000` descending, `D≤Dmax` recursion ban
+- [ ] Implement `LockFreeTaskQueue` `#[repr(C, align(64))]` per `docs/technical/UPGRADE.md:110` — `head: AtomicUsize`, `tail: AtomicUsize`, `tasks: [*mut TCB; 256]`, plus `RegistryBits` pad to avoid false sharing (`_pad:[u8;56]`)
+- [ ] Implement `push_task`/`pop_task` with `Ordering::Relaxed`/`Acquire`/`Release` CAS loop capped 4 iters → fallback per-core local queue (work-stealing); `WFE`/`SEV` (ARM) / `MONITOR/MWAIT` (x86) / IPI for cross-core wake, not spin
+- [ ] Implement 43c context switch in `crates/hros-arch-arm/src/switch.rs` (`stmdb {r4-r11}` 8c + `ldmia` 8c) and `crates/hros-arch-riscv/src/switch.rs` (`sw`/`lw` + `csrrw sp,mscratch`), plus `InterruptController` `VTOR`/`mtvec` `dsb/isb`/`fence.i` as in `src/kernel/interrupt.rs:203`
+- [ ] Configure SysTick/APIC/`mtime` — `N = f_CPU * Δt` (84 MHz×1 ms=84 000 ticks), `STK_LOAD/STK_VAL/STK_CTRL=0x07`, test 1 ms quantum with `DWT->CYCCNT` delta
+- [ ] Add shadow stack / PAC / CET hook — `D≤Dmax` checked at compile time, `hardware Shadow Stack` stub for `ARM PAC`/`x86 CET`
+- [ ] Test 43c determinism — `DWT->CYCCNT` 10 000 switches `max-min==0`, `σ==0` (no TLB flush), `loom` model `64×push_task` terminates ≤12c p95, `size` 128 KiB cap SRAM `64×16K/8` cached in L1
+
+_DoD:_ `T_ctx==43 ±0` (12+8+3+8+12) @168 MHz `0.255µs`, `σ==0`, guard `3→1c` (1 MiB in 1c), `128KiB` `REGISTRY_BITS` L1-cached, `LockFreeTaskQueue` 8–12c dispatch `WFE/SEV` not spin, `rg todo!` ==0, `no_alloc`, `cargo test` vector-vs-scalar pass.
 
 ---
 
