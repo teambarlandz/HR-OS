@@ -2,11 +2,11 @@
 
 > **Source of truth:** `docs/production/HR-OS_PRODUCTION_BLUEPRINT.md` (Deliverables 1–4). This file tracks _current_ and _immediate_ work only — not the full roadmap.
 
-## Current Phase: Phase 3 — Axes 2 & 4 (Autonomous DMA + Single-Pass JIT)
+## Current Phase: Phase 4 — Verification & HIL Fuzz
 
-**Goal:** Zero-copy PCIe/DMA rings (0 CPU) + LL(1) streaming JIT (25c/B) into EXEC_BUFFER with 1c vector guards.
+**Goal:** WCET ledger, RTA proof, 1M fuzz + WWDT window, benchmark vs FreeRTOS/seL4 — 0 jitter, 0 escapes.
 
-**Status:** `COMPLETED Phase 0, 1, 2 — IN PROGRESS Phase 3 (80% DMA+JIT verified, ECAM full enum pending)` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
+**Status:** `COMPLETED Phase 0, 1, 2, 3 — IN PROGRESS Phase 4` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
 
 ---
 
@@ -96,7 +96,7 @@ _DoD:_ `T_ctx==43 ±0` (12+8+3+8+12) @168 MHz `0.255µs`, `σ==0`, guard `3→1c
 
 ---
 
-### Phase 3 — Axes 2 & 4 (Queued)
+### Phase 3 — Axes 2 & 4 (COMPLETED 2026-08-22)
 
 - [x] Axis 2: ECAM `Target=Base+(B<<20)|(D<<15)|(F<<12)|R` **✓ ECAM O(1) 0x40113010**, `AutonomousDmaRing align(64)` 0 blocked CPU **✓ 127 cap + submit 126 + full PASS (host aarch64)**
 - [x] Axis 4: `Lexer<'a>` 25c/B **✓ zero-alloc**, `Compiler` 64/4×64/128 **✓**, `Thumb2Emitter`/`Riscv32Emitter` **✓**, `native.rs` two-reg `ACC=r0/a0` **✓**, `flush_icache` `dsb/isb`/`fence.i` **✓** _(already in src/compiler/_ from holy_rust, verified QEMU poke e2e 85c)*
@@ -105,7 +105,7 @@ _DoD:_ DMA 8c 0 copy **✓ 127 ring + ECAM O(1) PASS**, `poke` e2e 85c 0.50µs *
 
 ---
 
-### Phase 4 — Verification & HIL Fuzz (Queued)
+### Phase 4 — Verification & HIL Fuzz (IN PROGRESS)
 
 - [ ] WCET ledger `E=T_JIT+T_Exec+T_Cap+T_Ctx`, RTA `R_i≤D_i` proof, 1M fuzz + WWDT, benchmark vs FreeRTOS/seL4
 
