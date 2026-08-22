@@ -25,7 +25,13 @@ pub fn t_exec(bb_costs: &[usize], bounds: &[usize]) -> usize {
 
 /// Total WCET E(Ti)
 #[inline(always)]
-pub fn total_wcet(s_bytes: usize, n_cap: usize, vector: bool, bb_costs: &[usize], bounds: &[usize]) -> usize {
+pub fn total_wcet(
+    s_bytes: usize,
+    n_cap: usize,
+    vector: bool,
+    bb_costs: &[usize],
+    bounds: &[usize],
+) -> usize {
     t_jit(s_bytes) + t_cap(n_cap, vector) + t_exec(bb_costs, bounds) + T_CTX
 }
 

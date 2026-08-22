@@ -18,7 +18,12 @@ pub struct PcieHeader {
     pub command_status: u32,
     pub class_revision: u32,
     pub bist_header_latency_cache: u32,
-    pub bar0: u32, pub bar1: u32, pub bar2: u32, pub bar3: u32, pub bar4: u32, pub bar5: u32,
+    pub bar0: u32,
+    pub bar1: u32,
+    pub bar2: u32,
+    pub bar3: u32,
+    pub bar4: u32,
+    pub bar5: u32,
 }
 
 #[inline(always)]
@@ -33,7 +38,10 @@ pub fn bar_size(bar_addr: usize) -> usize {
 #[derive(Copy, Clone)]
 #[repr(C, align(64))]
 pub struct DmaDescriptor {
-    pub src_addr: u64, pub dest_addr: u64, pub length: u32, pub flags: u32,
+    pub src_addr: u64,
+    pub dest_addr: u64,
+    pub length: u32,
+    pub flags: u32,
 }
 
 #[repr(C, align(64))]
@@ -45,21 +53,43 @@ pub struct AutonomousDmaRing {
 
 impl AutonomousDmaRing {
     pub const fn new() -> Self {
-        Self { descriptors: [DmaDescriptor { src_addr: 0, dest_addr: 0, length: 0, flags: 0 }; 128], head: AtomicU32::new(0), tail: AtomicU32::new(0) }
+        Self {
+            descriptors: [DmaDescriptor {
+                src_addr: 0,
+                dest_addr: 0,
+                length: 0,
+                flags: 0,
+            }; 128],
+            head: AtomicU32::new(0),
+            tail: AtomicU32::new(0),
+        }
     }
     #[inline(always)]
     #[allow(clippy::missing_safety_doc, clippy::result_unit_err)]
     pub unsafe fn submit_transfer(&self, src: u64, dest: u64, len: u32) -> Result<(), ()> {
         let cur_tail = self.tail.load(Ordering::Relaxed);
         let next_tail = (cur_tail + 1) % 128;
-        if next_tail == self.head.load(Ordering::Acquire) { return Err(()); }
-        let desc_ptr = unsafe { self.descriptors.as_ptr().add(cur_tail as usize) } as *mut DmaDescriptor;
-        unsafe { (*desc_ptr) = DmaDescriptor { src_addr: src, dest_addr: dest, length: len, flags: 0x01 }; core::sync::atomic::compiler_fence(Ordering::Release); }
+        if next_tail == self.head.load(Ordering::Acquire) {
+            return Err(());
+        }
+        let desc_ptr =
+            unsafe { self.descriptors.as_ptr().add(cur_tail as usize) } as *mut DmaDescriptor;
+        unsafe {
+            (*desc_ptr) = DmaDescriptor {
+                src_addr: src,
+                dest_addr: dest,
+                length: len,
+                flags: 0x01,
+            };
+            core::sync::atomic::compiler_fence(Ordering::Release);
+        }
         self.tail.store(next_tail, Ordering::Release);
         Ok(())
     }
     #[inline(always)]
-    pub fn has_completed(&self) -> bool { self.head.load(Ordering::Acquire) != self.tail.load(Ordering::Acquire) }
+    pub fn has_completed(&self) -> bool {
+        self.head.load(Ordering::Acquire) != self.tail.load(Ordering::Acquire)
+    }
     #[inline(always)]
     pub fn capacity(&self) -> usize {
         let head = self.head.load(Ordering::Acquire) as usize;

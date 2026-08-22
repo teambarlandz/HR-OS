@@ -4,7 +4,10 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-use hros_hal::{cap::{Mask256, CapId, VectorCapabilityEngine}, exec, irq, switch};
+use hros_hal::{
+    cap::{CapId, Mask256, VectorCapabilityEngine},
+    exec, irq, switch,
+};
 
 pub struct X86Switch;
 pub struct X86Irq;
@@ -13,18 +16,28 @@ pub struct X86ExecBuffer;
 
 impl switch::ContextSwitch for X86Switch {
     type Frame = [u64; 8];
-    unsafe fn save_callee(sp: *mut u8) -> *mut u8 { sp }
-    unsafe fn restore_callee(sp: *const u8) -> *const u8 { sp as *mut u8 }
-    fn next_task(cur: usize, len: usize) -> usize { (cur + 1) % len }
+    unsafe fn save_callee(sp: *mut u8) -> *mut u8 {
+        sp
+    }
+    unsafe fn restore_callee(sp: *const u8) -> *const u8 {
+        sp as *mut u8
+    }
+    fn next_task(cur: usize, len: usize) -> usize {
+        (cur + 1) % len
+    }
     unsafe fn switch(_cur: *mut *mut u8, _nxt: *const u8) {}
 }
 impl irq::InterruptController for X86Irq {
     const SLOTS: usize = 32;
     unsafe fn relocate(_table: *const u8) {}
-    fn pending() -> Option<usize> { None }
+    fn pending() -> Option<usize> {
+        None
+    }
     unsafe fn attach(_slot: usize, _h: Option<unsafe extern "C" fn()>) {}
     unsafe fn ack(_slot: usize) {}
-    fn is_nmi(_slot: usize) -> bool { false }
+    fn is_nmi(_slot: usize) -> bool {
+        false
+    }
 }
 
 impl VectorCapabilityEngine for X86CapEngine {
@@ -45,7 +58,9 @@ impl VectorCapabilityEngine for X86CapEngine {
             // To keep host tests portable, we gate with cfg(target_feature="avx2").
             #[cfg(target_feature = "avx2")]
             unsafe {
-                use core::arch::x86_64::{__m256i, _mm256_and_si256, _mm256_loadu_si256, _mm256_testc_si256};
+                use core::arch::x86_64::{
+                    __m256i, _mm256_and_si256, _mm256_loadu_si256, _mm256_testc_si256,
+                };
                 let vcap = _mm256_loadu_si256(vcap_base as *const __m256i);
                 let mreq = _mm256_loadu_si256(mask.0.as_ptr() as *const __m256i);
                 let and = _mm256_and_si256(vcap, mreq);
@@ -55,7 +70,10 @@ impl VectorCapabilityEngine for X86CapEngine {
             unsafe {
                 let v = core::slice::from_raw_parts(vcap_base, 4);
                 let m = mask.0;
-                (v[0] & m[0] == m[0]) && (v[1] & m[1] == m[1]) && (v[2] & m[2] == m[2]) && (v[3] & m[3] == m[3])
+                (v[0] & m[0] == m[0])
+                    && (v[1] & m[1] == m[1])
+                    && (v[2] & m[2] == m[2])
+                    && (v[3] & m[3] == m[3])
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
@@ -63,16 +81,23 @@ impl VectorCapabilityEngine for X86CapEngine {
             unsafe {
                 let v = core::slice::from_raw_parts(vcap_base, 4);
                 let m = mask.0;
-                (v[0] & m[0] == m[0]) && (v[1] & m[1] == m[1]) && (v[2] & m[2] == m[2]) && (v[3] & m[3] == m[3])
+                (v[0] & m[0] == m[0])
+                    && (v[1] & m[1] == m[1])
+                    && (v[2] & m[2] == m[2])
+                    && (v[3] & m[3] == m[3])
             }
         }
     }
     fn build_mask(addr: u32, len: usize) -> Option<Mask256> {
-        if len == 0 || len > 256 { return None; }
+        if len == 0 || len > 256 {
+            return None;
+        }
         let k_start = (addr >> 12) as usize;
         let k_end = k_start + len - 1;
         let window_base = k_start & !255;
-        if k_end >= window_base + 256 { return None; }
+        if k_end >= window_base + 256 {
+            return None;
+        }
         let mut mask = [0u64; 4];
         for k in k_start..=k_end {
             let off = k - window_base;
@@ -80,21 +105,41 @@ impl VectorCapabilityEngine for X86CapEngine {
         }
         Some(Mask256(mask))
     }
-    fn addr_to_cap(_addr: u32) -> Option<CapId> { None }
-    fn acquire(_id: CapId) -> bool { false }
+    fn addr_to_cap(_addr: u32) -> Option<CapId> {
+        None
+    }
+    fn acquire(_id: CapId) -> bool {
+        false
+    }
     fn release(_id: CapId) {}
-    fn available(_id: CapId) -> bool { true }
+    fn available(_id: CapId) -> bool {
+        true
+    }
 }
 
 impl exec::ExecutionBuffer for X86ExecBuffer {
-    fn base() -> *mut u8 { 0x100000 as *mut u8 }
-    fn len(&self) -> usize { 0 }
-    unsafe fn emit16(&mut self, _hw: u16) -> Result<(), exec::EmitError> { Ok(()) }
-    unsafe fn emit32(&mut self, _w: u32) -> Result<(), exec::EmitError> { Ok(()) }
+    fn base() -> *mut u8 {
+        0x100000 as *mut u8
+    }
+    fn len(&self) -> usize {
+        0
+    }
+    unsafe fn emit16(&mut self, _hw: u16) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
+    unsafe fn emit32(&mut self, _w: u32) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
     unsafe fn flush_icache(&self) {
         #[cfg(target_arch = "x86_64")]
-        unsafe { core::arch::asm!("mfence", options(nostack)) }
+        unsafe {
+            core::arch::asm!("mfence", options(nostack))
+        }
     }
-    unsafe fn call(&self, _off: usize) -> u32 { 0 }
-    unsafe fn emit_ret(&mut self) -> Result<(), exec::EmitError> { Ok(()) }
+    unsafe fn call(&self, _off: usize) -> u32 {
+        0
+    }
+    unsafe fn emit_ret(&mut self) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
 }

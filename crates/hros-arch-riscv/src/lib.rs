@@ -44,7 +44,9 @@ impl switch::ContextSwitch for RiscvSwitch {
         inp
     }
     #[inline(always)]
-    fn next_task(cur: usize, len: usize) -> usize { (cur + 1) % len }
+    fn next_task(cur: usize, len: usize) -> usize {
+        (cur + 1) % len
+    }
     #[inline(always)]
     unsafe fn switch(cur: *mut *mut u8, nxt: *const u8) {
         unsafe {
@@ -70,7 +72,9 @@ impl irq::InterruptController for RiscvIrv {
         unsafe { asm!("fence.i", options(nostack)) }
     }
     unsafe fn ack(_slot: usize) {}
-    fn is_nmi(_slot: usize) -> bool { false }
+    fn is_nmi(_slot: usize) -> bool {
+        false
+    }
 }
 impl cap::VectorCapabilityEngine for RiscvCapEngine {
     unsafe fn verify_scalar(addr: u32, base: *const u64) -> bool {
@@ -83,32 +87,60 @@ impl cap::VectorCapabilityEngine for RiscvCapEngine {
         unsafe {
             let v = core::slice::from_raw_parts(base, 4);
             let m = mask.0;
-            (v[0] & m[0] == m[0]) && (v[1] & m[1] == m[1]) && (v[2] & m[2] == m[2]) && (v[3] & m[3] == m[3])
+            (v[0] & m[0] == m[0])
+                && (v[1] & m[1] == m[1])
+                && (v[2] & m[2] == m[2])
+                && (v[3] & m[3] == m[3])
         }
     }
     fn build_mask(addr: u32, len: usize) -> Option<cap::Mask256> {
-        if len == 0 || len > 256 { return None; }
+        if len == 0 || len > 256 {
+            return None;
+        }
         let k_start = (addr >> 12) as usize;
         let k_end = k_start + len - 1;
         let base = k_start & !255;
-        if k_end >= base + 256 { return None; }
+        if k_end >= base + 256 {
+            return None;
+        }
         let mut m = [0u64; 4];
-        for k in k_start..=k_end { let o = k - base; m[o>>6] |= 1u64 << (o&63); }
+        for k in k_start..=k_end {
+            let o = k - base;
+            m[o >> 6] |= 1u64 << (o & 63);
+        }
         Some(cap::Mask256(m))
     }
-    fn addr_to_cap(_addr: u32) -> Option<cap::CapId> { None }
-    fn acquire(_id: cap::CapId) -> bool { false }
+    fn addr_to_cap(_addr: u32) -> Option<cap::CapId> {
+        None
+    }
+    fn acquire(_id: cap::CapId) -> bool {
+        false
+    }
     fn release(_id: cap::CapId) {}
-    fn available(_id: cap::CapId) -> bool { true }
+    fn available(_id: cap::CapId) -> bool {
+        true
+    }
 }
 impl exec::ExecutionBuffer for RiscvExecBuffer {
-    fn base() -> *mut u8 { 0x08000000 as *mut u8 }
-    fn len(&self) -> usize { 0 }
-    unsafe fn emit16(&mut self, _hw: u16) -> Result<(), exec::EmitError> { Ok(()) }
-    unsafe fn emit32(&mut self, _w: u32) -> Result<(), exec::EmitError> { Ok(()) }
+    fn base() -> *mut u8 {
+        0x08000000 as *mut u8
+    }
+    fn len(&self) -> usize {
+        0
+    }
+    unsafe fn emit16(&mut self, _hw: u16) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
+    unsafe fn emit32(&mut self, _w: u32) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
     unsafe fn flush_icache(&self) {
         unsafe { asm!("fence.i", options(nostack)) }
     }
-    unsafe fn call(&self, _off: usize) -> u32 { 0 }
-    unsafe fn emit_ret(&mut self) -> Result<(), exec::EmitError> { Ok(()) }
+    unsafe fn call(&self, _off: usize) -> u32 {
+        0
+    }
+    unsafe fn emit_ret(&mut self) -> Result<(), exec::EmitError> {
+        Ok(())
+    }
 }

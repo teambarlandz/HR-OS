@@ -1,6 +1,8 @@
 //! SysTick / APIC / mtime driver — hros-drivers crate
 #[inline(always)]
-pub fn systick_reload(f_cpu_hz: u32, delta_ms: u32) -> u32 { (f_cpu_hz / 1000) * delta_ms }
+pub fn systick_reload(f_cpu_hz: u32, delta_ms: u32) -> u32 {
+    (f_cpu_hz / 1000) * delta_ms
+}
 #[cfg(target_arch = "arm")]
 pub mod arm {
     pub const STK_CTRL: usize = 0xE000E010;
@@ -23,5 +25,7 @@ pub mod riscv {
     pub const MTIME: usize = 0x0200BFF8;
     pub const MTIMECMP: usize = 0x02004000;
     #[inline(always)]
-    pub unsafe fn configure(_ticks: u32) { unsafe { core::arch::asm!("fence.i", options(nostack)) } }
+    pub unsafe fn configure(_ticks: u32) {
+        unsafe { core::arch::asm!("fence.i", options(nostack)) }
+    }
 }

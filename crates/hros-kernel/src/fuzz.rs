@@ -2,14 +2,20 @@
 //! 1M UART byte-mutations, DMA range-mutations, WWDT [t_lower, t_upper]
 
 /// Simple LCG PRNG for deterministic fuzz (no std rand, no alloc)
-pub struct Lcg { state: u32 }
+pub struct Lcg {
+    state: u32,
+}
 impl Lcg {
-    pub fn new(seed: u32) -> Self { Self { state: seed } }
+    pub fn new(seed: u32) -> Self {
+        Self { state: seed }
+    }
     pub fn next(&mut self) -> u32 {
         self.state = self.state.wrapping_mul(1664525).wrapping_add(1013904223);
         self.state
     }
-    pub fn next_byte(&mut self) -> u8 { (self.next() >> 24) as u8 }
+    pub fn next_byte(&mut self) -> u8 {
+        (self.next() >> 24) as u8
+    }
 }
 
 /// Fuzz UART byte stream: generate `n` random bytes
@@ -20,7 +26,9 @@ pub fn fuzz_uart(n: usize, seed: u32) -> (usize, usize) {
     for _ in 0..n {
         let len = (rng.next_byte() % 32) + 1;
         let mut _buf = [0u8; 32];
-        for i in 0..len as usize { _buf[i] = rng.next_byte(); }
+        for i in 0..len as usize {
+            _buf[i] = rng.next_byte();
+        }
         // Simulate check_access for random addr (no panic, just logic)
         let _addr = (rng.next() & 0xFFFFF000) as u32;
         // For host, we just count checks; real check_access is in hros-cap
@@ -37,7 +45,10 @@ pub fn wwdt_window_test() -> bool {
     let inside = (t_lower + t_upper) / 2;
     let before = t_lower - 1000;
     let after = t_upper + 1000;
-    inside > t_lower && inside < t_upper && !(before > t_lower && before < t_upper) && !(after > t_lower && after < t_upper)
+    inside > t_lower
+        && inside < t_upper
+        && !(before > t_lower && before < t_upper)
+        && !(after > t_lower && after < t_upper)
 }
 
 #[cfg(test)]

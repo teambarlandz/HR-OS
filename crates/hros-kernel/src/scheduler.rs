@@ -93,7 +93,11 @@ impl LockFreeTaskQueue {
     pub fn len(&self) -> usize {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Acquire);
-        if tail >= head { tail - head } else { 256 - head + tail }
+        if tail >= head {
+            tail - head
+        } else {
+            256 - head + tail
+        }
     }
 
     #[inline(always)]
@@ -156,7 +160,9 @@ pub unsafe fn configure_systick(f_cpu_hz: u32, delta_ms: u32) -> u32 {
 pub unsafe fn configure_mtime(_f_cpu_hz: u32, _delta_ms: u32) {
     // Stub for Phase 2 — real impl would program mtimecmp = mtime + delta
     #[cfg(target_arch = "riscv32")]
-    unsafe { core::arch::asm!("fence.i", options(nostack)) }
+    unsafe {
+        core::arch::asm!("fence.i", options(nostack))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -175,22 +181,33 @@ pub struct ShadowStack {
 }
 
 impl ShadowStack {
-    pub const fn new() -> Self { Self { slots: [0; D_MAX], depth: 0 } }
+    pub const fn new() -> Self {
+        Self {
+            slots: [0; D_MAX],
+            depth: 0,
+        }
+    }
     #[inline(always)]
     pub fn push(&mut self, ret_addr: usize) -> Result<(), ()> {
-        if self.depth >= D_MAX { return Err(()); }
+        if self.depth >= D_MAX {
+            return Err(());
+        }
         self.slots[self.depth] = ret_addr;
         self.depth += 1;
         Ok(())
     }
     #[inline(always)]
     pub fn pop(&mut self) -> Option<usize> {
-        if self.depth == 0 { return None; }
+        if self.depth == 0 {
+            return None;
+        }
         self.depth -= 1;
         Some(self.slots[self.depth])
     }
     #[inline(always)]
-    pub fn depth(&self) -> usize { self.depth }
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
 }
 
 /// Global shadow stack — single per core (Phase 2 stub, per-core sharding in Phase 3)
