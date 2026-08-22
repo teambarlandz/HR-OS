@@ -2,6 +2,10 @@
 //!
 //! - [`uart`] — bare-metal UART driver with static RX ring buffer.
 //! - [`repl`] — ASCII terminal state machine and command handler.
+//! - [`pcie`] — ECAM enumerator + Autonomous DMA Ring (Axis 2).
+//! - [`timer`] — SysTick/APIC/mtime driver (Axis 1).
 
+pub mod pcie;
 pub mod repl;
+pub mod timer;
 pub mod uart;
