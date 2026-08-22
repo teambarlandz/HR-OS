@@ -6,7 +6,7 @@
 
 **Goal:** Reproducible cross-build from `x86_64-unknown-linux` host to all HR-OS SASA targets without host linker contamination. This phase blocks all later work.
 
-**Status:** `IN PROGRESS — Phase 0 95%` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
+**Status:** `COMPLETED Phase 0 — IN PROGRESS Phase 1` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
 
 ---
 
@@ -55,19 +55,19 @@
 
 ---
 
-### Phase 1 — Bare-Metal Foundation (Queued, Not Started)
+### Phase 1 — Bare-Metal Foundation (COMPLETED 2026-08-22)
 
-- [ ] `Reset` (ARM plain `fn` vs RISC-V `#[naked]` + `la sp/gp`) + `init_data_bss()` volatile copy
-- [ ] `.isr_vector` 16-word linker emission (no double Thumb-bit), `fault_hang` UART announce
-- [ ] SRAM relocation to `RAM_VECTOR_TABLE align(1024)` → `VTOR`/`mtvec` + `dsb/isb`/`fence.i`
-- [ ] Early console `drivers/uart.rs` (CR1 UE|TE|RE, TXE bit7/RXNE bit5, 256B SPSC ring)
-- [ ] `panic_handler` → UART `PANIC:` + `wfi`
+- [x] `Reset` (ARM plain `fn` vs RISC-V `#[naked]` + `la sp/gp`) + `init_data_bss()` volatile copy _(verified: src/main.rs:48 / 66, src/kernel/memory.rs:130, QEMU boot)_
+- [x] `.isr_vector` 16-word linker emission (no double Thumb-bit `LONG(Reset)` odd, `LONG(_stack_top)`), `fault_hang` UART announce `**FAULT: core exception, halted**` _(verified: linker/memory-layout.x:26, readelf .isr_vector 0x08000000, llvm-objdump fault_hang b580)_
+- [x] SRAM relocation to `RAM_VECTOR_TABLE align(1024)` → `VTOR=0xE000ED08` + `dsb/isb`/`fence.i` _(verified: readelf sram_vectors 0x20000400 Align 1024, src/kernel/interrupt.rs:203 VTOR write, QEMU)_
+- [x] Early console `drivers/uart.rs` (CR1 UE|TE|RE @0x40011000, TXE bit7/RXNE bit5, 256B SPSC ring, `write_hex/dec`) _(verified: drivers/uart.rs:60, QEMU banner <100ms)_
+- [x] `panic_handler` → UART `PANIC:` + `wfi` _(verified: src/main.rs:18, reports via uart::write_str then wfi loop)_
 
-_DoD:_ `VTOR==0x20000400`, trap `peek <unmapped>` → `**FAULT**` <2c, no silent lockup, `/DISCARD` `.eh_frame`.
+_DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: core exception, halted**` ✓ (0x50000000 returns 0, 0x30000000 faults as expected), `/DISCARD` `.eh_frame` ✓ (readelf no .eh_frame), `fault_hang` announces via UART not lockup ✓
 
 ---
 
-### Phase 2 — Axes 1 & 3 (Queued)
+### Phase 2 — Axes 1 & 3 (IN PROGRESS)
 
 - [ ] Axis 1: SysTick 43c switch (12 auto+8 push+3 sched+8 pop+12 unstack), `LockFreeTaskQueue align(64)` CAS+WFE/SEV
 - [ ] Axis 3: `REGISTRY_BITS @0x20001000 AtomicU32[8]`, scalar 3c guard, AVX2 `VANDPS+VPTEST` 1c 256×4K, `Cap<T>`/`PinGuard` linear tokens
