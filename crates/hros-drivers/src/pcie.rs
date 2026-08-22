@@ -48,6 +48,7 @@ impl AutonomousDmaRing {
         Self { descriptors: [DmaDescriptor { src_addr: 0, dest_addr: 0, length: 0, flags: 0 }; 128], head: AtomicU32::new(0), tail: AtomicU32::new(0) }
     }
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc, clippy::result_unit_err)]
     pub unsafe fn submit_transfer(&self, src: u64, dest: u64, len: u32) -> Result<(), ()> {
         let cur_tail = self.tail.load(Ordering::Relaxed);
         let next_tail = (cur_tail + 1) % 128;

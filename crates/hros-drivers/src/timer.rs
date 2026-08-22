@@ -8,6 +8,7 @@ pub mod arm {
     pub const STK_VAL: usize = 0xE000E018;
     pub const CTRL_BITS: u32 = 0x07;
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn configure(ticks: u32) {
         unsafe {
             core::ptr::write_volatile(STK_LOAD as *mut u32, ticks);
