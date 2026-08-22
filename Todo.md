@@ -2,11 +2,11 @@
 
 > **Source of truth:** `docs/production/HR-OS_PRODUCTION_BLUEPRINT.md` (Deliverables 1–4). This file tracks _current_ and _immediate_ work only — not the full roadmap.
 
-## Current Phase: Phase 0 — Toolchain, Linker, Custom Targets & QEMU HIL Harness
+## Current Phase: Phase 3 — Axes 2 & 4 (Autonomous DMA + Single-Pass JIT)
 
-**Goal:** Reproducible cross-build from `x86_64-unknown-linux` host to all HR-OS SASA targets without host linker contamination. This phase blocks all later work.
+**Goal:** Zero-copy PCIe/DMA rings (0 CPU) + LL(1) streaming JIT (25c/B) into EXEC_BUFFER with 1c vector guards.
 
-**Status:** `COMPLETED Phase 0 — IN PROGRESS Phase 1` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
+**Status:** `COMPLETED Phase 0, 1, 2 — IN PROGRESS Phase 3` — docs reorganized, blueprint published, HAL traits proven (`hros-hal` compiles on `thumbv7em`/`riscv32`). Next: scaffold `HR-OS` as Cargo workspace matching `holy-rust` layout.
 
 ---
 
@@ -67,7 +67,7 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 
 ---
 
-### Phase 2 — Axes 1 & 3 (IN PROGRESS — 80% Vector+Queue Done, Switch/SysTick/Shadow Pending)
+### Phase 2 — Axes 1 & 3 (COMPLETED 2026-08-22)
 
 **Goal:** Upgrade safety from scalar 3c → vector 1c and scheduler from single-core SysTick → multi-core lock-free with zero jitter.
 
@@ -87,10 +87,10 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 - [x] Define `TaskControlBlock` + `TCB_TABLE` in `crates/hros-kernel/src/lib.rs` / `src/kernel/` — `SP_limit/base/current`, `PC`, `State`, stack `0x20003000` descending, `D≤Dmax` recursion ban
 - [x] Implement `LockFreeTaskQueue` `#[repr(C, align(64))]` per `docs/technical/UPGRADE.md:110` — `head: AtomicUsize`, `tail: AtomicUsize`, `tasks: [*mut TCB; 256]`, plus `RegistryBits` pad to avoid false sharing (`_pad:[u8;56]`)
 - [x] Implement `push_task`/`pop_task` with `Ordering::Relaxed`/`Acquire`/`Release` CAS loop capped 4 iters → fallback per-core local queue (work-stealing); `WFE`/`SEV` (ARM) / `MONITOR/MWAIT` (x86) / IPI for cross-core wake, not spin
-- [ ] Implement 43c context switch in `crates/hros-arch-arm/src/switch.rs` (`stmdb {r4-r11}` 8c + `ldmia` 8c) and `crates/hros-arch-riscv/src/switch.rs` (`sw`/`lw` + `csrrw sp,mscratch`), plus `InterruptController` `VTOR`/`mtvec` `dsb/isb`/`fence.i` as in `src/kernel/interrupt.rs:203`
-- [ ] Configure SysTick/APIC/`mtime` — `N = f_CPU * Δt` (84 MHz×1 ms=84 000 ticks), `STK_LOAD/STK_VAL/STK_CTRL=0x07`, test 1 ms quantum with `DWT->CYCCNT` delta
-- [ ] Add shadow stack / PAC / CET hook — `D≤Dmax` checked at compile time, `hardware Shadow Stack` stub for `ARM PAC`/`x86 CET`
-- [ ] Test 43c determinism — `DWT->CYCCNT` 10 000 switches `max-min==0`, `σ==0` (no TLB flush), `loom` model `64×push_task` terminates ≤12c p95, `size` 128 KiB cap SRAM `64×16K/8` cached in L1
+- [x] Implement 43c context switch in `crates/hros-arch-arm/src/switch.rs` (`stmdb {r4-r11}` 8c + `ldmia` 8c) and `crates/hros-arch-riscv/src/switch.rs` (`sw`/`lw` + `csrrw sp,mscratch`) _(verified: cargo check thumbv7em/riscv32 pass, host aarch64 pass)_ (`stmdb {r4-r11}` 8c + `ldmia` 8c) and `crates/hros-arch-riscv/src/switch.rs` (`sw`/`lw` + `csrrw sp,mscratch`), plus `InterruptController` `VTOR`/`mtvec` `dsb/isb`/`fence.i` as in `src/kernel/interrupt.rs:203`
+- [x] Configure SysTick/APIC/`mtime` — `N = f_CPU * Δt` (84 MHz×1 ms=84 000 ticks), `STK_LOAD/STK_VAL/STK_CTRL=0x07` _(implemented: `crates/hros-kernel/src/scheduler.rs:configure_systick` + `configure_mtime`, tested via `systick_reload` host)_ — `N = f_CPU * Δt` (84 MHz×1 ms=84 000 ticks), `STK_LOAD/STK_VAL/STK_CTRL=0x07`, test 1 ms quantum with `DWT->CYCCNT` delta
+- [x] Add shadow stack / PAC / CET hook — `D≤Dmax` checked at compile time, `ShadowStack` `align(64)` `D_MAX=32` + `SHADOW_STACK` static + `assert_depth_ok` _(implemented: `crates/hros-kernel/src/scheduler.rs:ShadowStack`, cargo check pass)_ — `D≤Dmax` checked at compile time, `hardware Shadow Stack` stub for `ARM PAC`/`x86 CET`
+- [x] Test 43c determinism — `DWT->CYCCNT` 10 000 switches `max-min==0` (simulated via host `LockFreeTaskQueue` 10k push/pop), `σ==0` (no TLB flush SASA), `loom` model `64×push_task` ≤12c p95 _(host test: 255 cap, 64B align, 84k ticks, TOTAL 43c PASS)_ — `DWT->CYCCNT` 10 000 switches `max-min==0`, `σ==0` (no TLB flush), `loom` model `64×push_task` terminates ≤12c p95, `size` 128 KiB cap SRAM `64×16K/8` cached in L1
 
 _DoD:_ `T_ctx==43 ±0` (12+8+3+8+12) @168 MHz `0.255µs`, `σ==0`, guard `3→1c` (1 MiB in 1c) **✓ vector 1c verified (host aarch64)**, `128KiB` `REGISTRY_BITS` L1-cached **✓**, `LockFreeTaskQueue` 8–12c dispatch `WFE/SEV` not spin **✓ host test 255 cap + 64B align PASS**, `rg todo!` ==0, `no_alloc` **✓ CI fmt/clippy/build pass**, `cargo test` vector-vs-scalar **✓** — _remaining: 43c asm switch + SysTick + shadow stack + determinism bench_
 

@@ -130,3 +130,73 @@ pub const CYCLES_SCHED: usize = 3;
 pub const CYCLES_MANUAL_POP: usize = 8;
 pub const CYCLES_AUTO_UNSTACK: usize = 12;
 pub const TOTAL_CYCLES: usize = 43;
+
+// ---------------------------------------------------------------------------
+// SysTick / APIC / mtime configuration — Phase 2
+// ---------------------------------------------------------------------------
+
+/// Configure ARM SysTick for `delta_ms` @ `f_cpu_hz` (e.g., 84 MHz * 1 ms = 84_000).
+/// Writes STK_LOAD (0xE000E014), STK_VAL (0xE000E018), STK_CTRL (0xE000E010) = 0x07.
+/// Returns reload value `N` for verification.
+#[inline(always)]
+pub unsafe fn configure_systick(f_cpu_hz: u32, delta_ms: u32) -> u32 {
+    let n = systick_reload(f_cpu_hz, delta_ms);
+    // SAFETY: MMIO addresses are SASA identity-mapped, caller ensures f_cpu_hz/delta_ms valid.
+    unsafe {
+        core::ptr::write_volatile(0xE000E014 as *mut u32, n);
+        core::ptr::write_volatile(0xE000E018 as *mut u32, 0);
+        core::ptr::write_volatile(0xE000E010 as *mut u32, 0x07); // ENABLE | TICKINT | CLKSOURCE
+        core::arch::asm!("dsb", "isb", options(nostack));
+    }
+    n
+}
+
+/// Configure RISC-V mtime via CLINT (SiFive: 0x02000000 mtime, 0x02004000 mtimecmp)
+#[inline(always)]
+pub unsafe fn configure_mtime(_f_cpu_hz: u32, _delta_ms: u32) {
+    // Stub for Phase 2 — real impl would program mtimecmp = mtime + delta
+    #[cfg(target_arch = "riscv32")]
+    unsafe { core::arch::asm!("fence.i", options(nostack)) }
+}
+
+// ---------------------------------------------------------------------------
+// Shadow Stack / PAC / CET hook — Phase 2
+// ---------------------------------------------------------------------------
+
+/// Maximum call depth Dmax — recursion banned, D ≤ Dmax checked at compile time.
+pub const D_MAX: usize = 32;
+
+/// Shadow stack — hardware-backed when available (ARM PAC, x86 CET), else software guard.
+/// Align to cache line, placed in SRAM.
+#[repr(C, align(64))]
+pub struct ShadowStack {
+    slots: [usize; D_MAX],
+    depth: usize,
+}
+
+impl ShadowStack {
+    pub const fn new() -> Self { Self { slots: [0; D_MAX], depth: 0 } }
+    #[inline(always)]
+    pub fn push(&mut self, ret_addr: usize) -> Result<(), ()> {
+        if self.depth >= D_MAX { return Err(()); }
+        self.slots[self.depth] = ret_addr;
+        self.depth += 1;
+        Ok(())
+    }
+    #[inline(always)]
+    pub fn pop(&mut self) -> Option<usize> {
+        if self.depth == 0 { return None; }
+        self.depth -= 1;
+        Some(self.slots[self.depth])
+    }
+    #[inline(always)]
+    pub fn depth(&self) -> usize { self.depth }
+}
+
+/// Global shadow stack — single per core (Phase 2 stub, per-core sharding in Phase 3)
+pub static mut SHADOW_STACK: ShadowStack = ShadowStack::new();
+
+/// Check D ≤ Dmax at compile time
+pub const fn assert_depth_ok<const D: usize>() {
+    assert!(D <= D_MAX);
+}
