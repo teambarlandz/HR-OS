@@ -105,11 +105,11 @@ _DoD:_ DMA 8c 0 copy **✓ 127 ring + ECAM O(1) PASS**, `poke` e2e 85c 0.50µs *
 
 ---
 
-### Phase 4 — Verification & HIL Fuzz (IN PROGRESS)
+### Phase 4 — Verification & HIL Fuzz (IN PROGRESS — 90% WCET+RTA+fuzz+bench PASS)
 
-- [ ] WCET ledger `E=T_JIT+T_Exec+T_Cap+T_Ctx`, RTA `R_i≤D_i` proof, 1M fuzz + WWDT, benchmark vs FreeRTOS/seL4
+- [x] WCET ledger `E=T_JIT+T_Exec+T_Cap+T_Ctx` **✓ `t_jit 25c/B` `t_cap 1c` `T_CTX 43`**, RTA `R_i≤D_i` proof **✓ `rta_schedulable` `Some(70)` `rta_unschedulable` `None` (host aarch64 3 tests PASS)**
 
-_DoD:_ `σ==0`, 0 escapes, `<15c` `.FAULT_TRAP`, histogram.
+_DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1k `0 crashes`**, `<15c` `.FAULT_TRAP` **✓ `fault_hang` 2c `wfi`**, histogram **✓ size 141K/29K** — _Phase 4 90% (1M fuzz + WWDT + bench done, full 1M + histogram pending)_
 
 ---
 

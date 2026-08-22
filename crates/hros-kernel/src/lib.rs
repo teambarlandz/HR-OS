@@ -36,3 +36,7 @@ pub mod interrupt {
 }
 pub mod scheduler;
 pub const BANNER: &[u8] = b"Holy Rust REPL v0.1\r\n";
+
+pub mod wcet;
+
+pub mod fuzz;
