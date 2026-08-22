@@ -10,9 +10,3 @@ name = "hros_hal"
 path = "src/lib.rs"
 
 [dependencies]
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"

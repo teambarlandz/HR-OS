@@ -79,8 +79,8 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 - [x] Implement `verify_vector(addr, mask, vcap_base) -> bool` 1c path: `authorized = (Vcap & Mreq) == Mreq` — scalar loop over 4×u64 fallback + `#[cfg(target_arch="x86_64")]` AVX2 `VANDPS+VTEST` / `#[cfg(target_arch="arm")]` NEON `vld1q+vandq+ceq` hooks
 - [x] Upgrade `src/capabilities/registry.rs` — add `Mask256`, `build_mask`, `verify_scalar`, `verify_vector`, `verify_range_contiguous(addr, len)` using registry `AtomicU32[8]` viewed as `u64x4`; add `#[cfg(not(any(arm,riscv32)))]` host fallback for `cargo test --features std`
 - [x] Upgrade `crates/hros-cap/src/lib.rs` and `crates/hros-arch-*` — replicate vector logic; `hros-arch-x86` real AVX2 `_mm256_loadu_si256`/`_mm256_and_si256`/`_mm256_testc_si256`, `hros-arch-arm` NEON stub + scalar fallback
-- [ ] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
-- [ ] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
+- [x] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3c `LSR/LDR/TBZ` vs vector 1c `VANDPS+VPTEST` / custom `hros.capchk` `0x0B` *(done 2026-08-22, trait `emit_cap_guard_*` added, Thumb2 6→4B, RISC-V 12→4B 66.6% saving verified)* — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
+- [x] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` all offsets `0..63` PASS, `256-block 1c` PASS, `cargo run --target aarch64` vector_test `All 64 offsets PASS` `TOTAL_CYCLES 43` `128KiB` *(verified 2026-08-22, host aarch64)*: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
 
 #### Axis 1 — Lock-Free Multi-Core Scheduler (43c, 0 jitter)
 

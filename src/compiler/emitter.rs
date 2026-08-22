@@ -43,6 +43,17 @@ pub trait TargetEmitter {
     fn emit_ret(&mut self) -> Result<(), EmitError>;
     /// Bytes emitted so far.
     fn bytes_written(&self) -> usize;
+
+    /// Emit scalar O(1) capability guard (3c) — LSR + LDR + TBZ.
+    /// Checks single 4K block `addr_reg` against task cap vector.
+    fn emit_cap_guard_scalar(&mut self, addr_reg: u8, tmp_reg: u8) -> Result<(), EmitError>;
+
+    /// Emit vector O(1) capability guard (1c) — 256-bit SIMD.
+    /// Checks contiguous `len` blocks via Mask256; 1c for 256 blocks.
+    fn emit_cap_guard_vector(&mut self, addr_reg: u8, len: usize) -> Result<(), EmitError>;
+
+    /// Emit custom RISC-V `hros.capchk` (1c) — hardware single-cycle.
+    fn emit_cap_guard_custom(&mut self, addr_reg: u8, cap_reg: u8) -> Result<(), EmitError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +306,41 @@ impl TargetEmitter for Thumb2Emitter {
     fn bytes_written(&self) -> usize {
         self.len_words * 2
     }
+
+    fn emit_cap_guard_scalar(&mut self, addr_reg: u8, _tmp_reg: u8) -> Result<(), EmitError> {
+        // Scalar 3c guard per AXIS-3: LSR + LDR + TBZ
+        // LSR tmp, addr, #12
+        // LSR tmp2, tmp, #6
+        // LDR cap_word, [cap_base, tmp2, LSL #3]
+        // LSR cap_word, cap_word, tmp
+        // TBZ cap_word, #0, .FAULT_TRAP
+        // For emitter, we emit placeholder 3 halfwords (actual encoding would be 6 bytes)
+        // 0xF3AF = ASR, 0xF8D0 = LDR, 0xEC10 = TBZ (placeholders)
+        self.push16(0xF3AF)?; // LSR
+        self.push16(0xF8D0)?; // LDR
+        self.push16(0xEC10)?; // TBZ
+        let _ = addr_reg;
+        Ok(())
+    }
+
+    fn emit_cap_guard_vector(&mut self, addr_reg: u8, len: usize) -> Result<(), EmitError> {
+        // Vector 1c guard per UPGRADE.md Step 1: single SIMD VANDPS+VPTEST fused as one pseudo-op
+        // For Thumb-2, we emit a single 32-bit MCR to custom coprocessor (placeholder 0xF3AF8000)
+        // Real hardware would do VLD1 + VAND + VPTEST in 1c; we model as 1x32-bit = 2 halfwords
+        if len > 256 {
+            return Err(EmitError::Overflow);
+        }
+        self.push16(0xF3AF)?;
+        self.push16(0x8000 | (addr_reg as u16 & 0xF) << 8 | (len as u16 & 0xFF))?;
+        Ok(())
+    }
+
+    fn emit_cap_guard_custom(&mut self, addr_reg: u8, cap_reg: u8) -> Result<(), EmitError> {
+        // Custom RISC-V hros.capchk on ARM as MCR placeholder: 2 halfwords
+        self.push16(0xF3AF)?;
+        self.push16(0x8000 | ((cap_reg as u16) << 8) | (addr_reg as u16))?;
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -397,5 +443,35 @@ impl TargetEmitter for Riscv32Emitter {
 
     fn bytes_written(&self) -> usize {
         self.len_words * 4
+    }
+
+    fn emit_cap_guard_scalar(&mut self, addr_reg: u8, _tmp_reg: u8) -> Result<(), EmitError> {
+        // Scalar 3c: SRLI + ANDI + LD + SRL + BNEZ (3 instructions, 12 bytes)
+        // Placeholder: 3 words
+        self.push32(0x00C5_5133)?; // SRLI
+        self.push32(0x03F5_5033)?; // ANDI+LD
+        self.push32(0x0005_8063)?; // BNEZ to .FAULT_TRAP (placeholder)
+        let _ = addr_reg;
+        Ok(())
+    }
+
+    fn emit_cap_guard_vector(&mut self, _addr_reg: u8, len: usize) -> Result<(), EmitError> {
+        // Vector 1c: single custom hros.capchk is NOT used here; vector is for x86/ARM NEON
+        // For RISC-V, vector path is same as scalar but with length prefix (still 1c for 256 blocks via loop in HW)
+        if len > 256 {
+            return Err(EmitError::Overflow);
+        }
+        self.push32(0xF3AF8000 | (len as u32 & 0xFF))?; // placeholder vector op
+        Ok(())
+    }
+
+    fn emit_cap_guard_custom(&mut self, addr_reg: u8, cap_reg: u8) -> Result<(), EmitError> {
+        // Custom RISC-V hros.capchk per UPGRADE.md Step 4: 1c hardware
+        // [ funct7 7b | rs2 5b | rs1 5b | funct3 3b | rd 5b | opcode 7b ]
+        let opcode: u32 = 0b0001011; // Custom-0
+        let funct3: u32 = 0b000;
+        let funct7: u32 = 0b0000001;
+        let raw = (funct7 << 25) | ((cap_reg as u32 & 0x1F) << 20) | ((addr_reg as u32 & 0x1F) << 15) | (funct3 << 12) | opcode;
+        self.push32(raw)
     }
 }
