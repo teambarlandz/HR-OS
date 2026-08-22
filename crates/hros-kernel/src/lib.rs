@@ -34,4 +34,5 @@ pub mod interrupt {
     #[repr(C, align(1024))] pub struct VectorTable { pub initial_sp: u32, pub reset: unsafe extern "C" fn() -> !, pub handlers: [Option<unsafe extern "C" fn()>; 32] }
     pub static mut RAM_VECTOR_TABLE: VectorTable = VectorTable { initial_sp: 0, reset: fault_hang, handlers: [None; 32] };
 }
+pub mod scheduler;
 pub const BANNER: &[u8] = b"Holy Rust REPL v0.1\r\n";

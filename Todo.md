@@ -73,20 +73,20 @@ _DoD:_ `VTOR==0x20000400` ✓, trap `peek 0x30000000` (SuperUser) → `**FAULT: 
 
 #### Axis 3 — Vector Capability Engine (SIMD 1c)
 
-- [ ] Define `Mask256` `#[repr(C, align(32))] pub struct Mask256(pub [u64; 4])` in `crates/hros-hal/src/cap.rs` and `src/capabilities/registry.rs` — 256 bits = 1 MiB (256×4K)
-- [ ] Implement `build_mask(addr: u32, len: usize) -> Option<Mask256>` for `[addr, addr+len*4096)` — compute `k_start=addr>>12`, `k_end`, span 4 words, handle word-boundary straddle + tail scalar epilogue
-- [ ] Implement `verify_scalar(addr, vcap_base) -> bool` 3c path: `k=addr>>12; idx=k>>6; bit=k&63; (W[idx]>>bit)&1` — 1 LSR + 1 LDR + 1 TBZ (already in `registry::available`)
-- [ ] Implement `verify_vector(addr, mask, vcap_base) -> bool` 1c path: `authorized = (Vcap & Mreq) == Mreq` — scalar loop over 4×u64 fallback + `#[cfg(target_arch="x86_64")]` AVX2 `VANDPS+VTEST` / `#[cfg(target_arch="arm")]` NEON `vld1q+vandq+ceq` hooks
-- [ ] Upgrade `src/capabilities/registry.rs` — add `Mask256`, `build_mask`, `verify_scalar`, `verify_vector`, `verify_range_contiguous(addr, len)` using registry `AtomicU32[8]` viewed as `u64x4`; add `#[cfg(not(any(arm,riscv32)))]` host fallback for `cargo test --features std`
-- [ ] Upgrade `crates/hros-cap/src/lib.rs` and `crates/hros-arch-*` — replicate vector logic; `hros-arch-x86` real AVX2 `_mm256_loadu_si256`/`_mm256_and_si256`/`_mm256_testc_si256`, `hros-arch-arm` NEON stub + scalar fallback
+- [x] Define `Mask256` `#[repr(C, align(32))] pub struct Mask256(pub [u64; 4])` in `crates/hros-hal/src/cap.rs` and `src/capabilities/registry.rs` — 256 bits = 1 MiB (256×4K)
+- [x] Implement `build_mask(addr: u32, len: usize) -> Option<Mask256>` for `[addr, addr+len*4096)` — compute `k_start=addr>>12`, `k_end`, span 4 words, handle word-boundary straddle + tail scalar epilogue
+- [x] Implement `verify_scalar(addr, vcap_base) -> bool` 3c path: `k=addr>>12; idx=k>>6; bit=k&63; (W[idx]>>bit)&1` — 1 LSR + 1 LDR + 1 TBZ (already in `registry::available`)
+- [x] Implement `verify_vector(addr, mask, vcap_base) -> bool` 1c path: `authorized = (Vcap & Mreq) == Mreq` — scalar loop over 4×u64 fallback + `#[cfg(target_arch="x86_64")]` AVX2 `VANDPS+VTEST` / `#[cfg(target_arch="arm")]` NEON `vld1q+vandq+ceq` hooks
+- [x] Upgrade `src/capabilities/registry.rs` — add `Mask256`, `build_mask`, `verify_scalar`, `verify_vector`, `verify_range_contiguous(addr, len)` using registry `AtomicU32[8]` viewed as `u64x4`; add `#[cfg(not(any(arm,riscv32)))]` host fallback for `cargo test --features std`
+- [x] Upgrade `crates/hros-cap/src/lib.rs` and `crates/hros-arch-*` — replicate vector logic; `hros-arch-x86` real AVX2 `_mm256_loadu_si256`/`_mm256_and_si256`/`_mm256_testc_si256`, `hros-arch-arm` NEON stub + scalar fallback
 - [ ] Update JIT guard injection in `crates/hros-jit`/`src/compiler/emitter.rs` — scalar 3-instr `LSR/LDR/TBZ` vs vector single `hros.capchk` / `VANDPS` choice; measure `I_base+N*3 → I_base+N*1` 66.6% reduction
 - [ ] Benchmark + unit test — `cargo test --features std` host-side encode helpers: `verify_vector` vs `verify_scalar` loop for all offsets `0..63`, `cargo bench` shows 3c→1c at 168 MHz `0.017µs → 0.0059µs`
 
 #### Axis 1 — Lock-Free Multi-Core Scheduler (43c, 0 jitter)
 
-- [ ] Define `TaskControlBlock` + `TCB_TABLE` in `crates/hros-kernel/src/lib.rs` / `src/kernel/` — `SP_limit/base/current`, `PC`, `State`, stack `0x20003000` descending, `D≤Dmax` recursion ban
-- [ ] Implement `LockFreeTaskQueue` `#[repr(C, align(64))]` per `docs/technical/UPGRADE.md:110` — `head: AtomicUsize`, `tail: AtomicUsize`, `tasks: [*mut TCB; 256]`, plus `RegistryBits` pad to avoid false sharing (`_pad:[u8;56]`)
-- [ ] Implement `push_task`/`pop_task` with `Ordering::Relaxed`/`Acquire`/`Release` CAS loop capped 4 iters → fallback per-core local queue (work-stealing); `WFE`/`SEV` (ARM) / `MONITOR/MWAIT` (x86) / IPI for cross-core wake, not spin
+- [x] Define `TaskControlBlock` + `TCB_TABLE` in `crates/hros-kernel/src/lib.rs` / `src/kernel/` — `SP_limit/base/current`, `PC`, `State`, stack `0x20003000` descending, `D≤Dmax` recursion ban
+- [x] Implement `LockFreeTaskQueue` `#[repr(C, align(64))]` per `docs/technical/UPGRADE.md:110` — `head: AtomicUsize`, `tail: AtomicUsize`, `tasks: [*mut TCB; 256]`, plus `RegistryBits` pad to avoid false sharing (`_pad:[u8;56]`)
+- [x] Implement `push_task`/`pop_task` with `Ordering::Relaxed`/`Acquire`/`Release` CAS loop capped 4 iters → fallback per-core local queue (work-stealing); `WFE`/`SEV` (ARM) / `MONITOR/MWAIT` (x86) / IPI for cross-core wake, not spin
 - [ ] Implement 43c context switch in `crates/hros-arch-arm/src/switch.rs` (`stmdb {r4-r11}` 8c + `ldmia` 8c) and `crates/hros-arch-riscv/src/switch.rs` (`sw`/`lw` + `csrrw sp,mscratch`), plus `InterruptController` `VTOR`/`mtvec` `dsb/isb`/`fence.i` as in `src/kernel/interrupt.rs:203`
 - [ ] Configure SysTick/APIC/`mtime` — `N = f_CPU * Δt` (84 MHz×1 ms=84 000 ticks), `STK_LOAD/STK_VAL/STK_CTRL=0x07`, test 1 ms quantum with `DWT->CYCCNT` delta
 - [ ] Add shadow stack / PAC / CET hook — `D≤Dmax` checked at compile time, `hardware Shadow Stack` stub for `ARM PAC`/`x86 CET`

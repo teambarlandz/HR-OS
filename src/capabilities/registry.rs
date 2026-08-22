@@ -42,6 +42,7 @@ pub enum CapId {
 ///
 /// SuperUser addresses map to `Some(CapId::SuperUser)` so the caller
 /// can check whether the SuperUser token is active.
+#[cfg(any(target_arch = "arm", target_arch = "riscv32"))]
 #[inline(always)]
 pub fn addr_to_cap_id(addr: u32) -> Option<CapId> {
     #[cfg(target_arch = "arm")]
@@ -106,6 +107,8 @@ pub fn check_access(addr: u32) -> Result<(), CapId> {
         let is_ram_flash = matches!(addr, 0x0800_0000..=0x080F_FFFF | 0x2000_0000..=0x2001_C000);
         #[cfg(target_arch = "riscv32")]
         let is_ram_flash = matches!(addr, 0x2000_0000..=0x2000_FFFF | 0x8000_0000..=0x8000_FFFF);
+        #[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
+        let is_ram_flash = true;
 
         if is_ram_flash {
             Ok(())
@@ -182,3 +185,137 @@ pub fn release(resource_id: usize) {
         w.fetch_and(!(1u32 << bit), Ordering::AcqRel);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Vector Capability Engine — 256-bit SIMD Upgrade (Phase 2, UPGRADE.md Step 1)
+// Scalar 3c → Vector 1c for 1 MiB (256×4K blocks)
+// ---------------------------------------------------------------------------
+
+/// 256-bit request mask (4×64) vs task vector `Vcap ∈ {0,1}²⁵⁶`.
+/// `authorized = (Vcap & Mreq) == Mreq` — single vector AND + test.
+#[repr(C, align(32))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mask256(pub [u64; 4]);
+
+impl Mask256 {
+    /// Zero mask (no bits set).
+    pub const ZERO: Self = Self([0; 4]);
+}
+
+/// Build `Mask256` for contiguous `len` blocks starting at `addr` (len ≤256).
+/// Returns `None` if `len == 0` or `len > 256` or range wraps.
+///
+/// Construction: `k_start = addr >> 12`, `k_end = k_start + len - 1`,
+/// then set bits `k_start..=k_end` in the 256-bit mask.
+/// Handles word-boundary straddle with 64-bit word + bit offsets.
+#[inline(always)]
+pub fn build_mask(addr: u32, len: usize) -> Option<Mask256> {
+    if len == 0 || len > 256 {
+        return None;
+    }
+    let k_start = (addr >> 12) as usize;
+    let k_end = k_start + len - 1;
+    // For Phase 2, mask is relative to the 256-window containing k_start.
+    // Caller must ensure `k_end - (k_start & !255) < 256` (single window).
+    // For simplicity, we build mask for low 256 bits relative to k_start's window base.
+    let window_base = k_start & !255usize;
+    if k_end >= window_base + 256 {
+        // Spans >256 window — scalar fallback will handle via loop; for vector path, reject
+        return None;
+    }
+    let mut mask = [0u64; 4];
+    for k in k_start..=k_end {
+        let offset = k - window_base;
+        let word = offset >> 6; // /64
+        let bit = offset & 63;
+        mask[word] |= 1u64 << bit;
+    }
+    Some(Mask256(mask))
+}
+
+/// Scalar predicate `P(addr,C)` — single 4 KiB block check, 3c.
+/// `k = addr >> 12; idx = k >> 5 (for u32) or k >> 6 (for u64 view); bit = k & 31/63`
+#[inline(always)]
+pub fn verify_scalar(addr: u32) -> bool {
+    let k = (addr >> 12) as usize;
+    // Use 32-bit view: word = k/32, bit = k%32
+    let word = k >> 5;
+    let bit = k & 31;
+    match REGISTRY_BITS.0.get(word) {
+        Some(w) => (w.load(Ordering::Acquire) >> bit) & 1 == 1,
+        None => false,
+    }
+}
+
+/// Vector predicate for contiguous `len` blocks — 1c for 256 blocks.
+/// `authorized = (Vcap & Mreq) == Mreq` across 4×u64.
+/// `vcap_base` must point to window base `&REGISTRY_BITS.0[window_base/32]` as `*const u64`.
+#[inline(always)]
+pub fn verify_vector(_addr: u32, mask: Mask256, vcap_base: *const u64) -> bool {
+    // SAFETY: vcap_base is 4×u64 window base, 32B aligned (Mask256 align 32).
+    // For host tests, caller may pass &REGISTRY_BITS as *const u64 with window_base=0.
+    unsafe {
+        let vcap = core::slice::from_raw_parts(vcap_base, 4);
+        let m = mask.0;
+        // Scalar loop over 4 — on x86_64 with AVX2 this optimizes to VANDPS+VPTEST
+        // when compiled with `target-feature=+avx2` (see hros-arch-x86).
+        // For Phase 2, this is the portable 1c-equivalent fallback.
+        (vcap[0] & m[0] == m[0]) && (vcap[1] & m[1] == m[1]) && (vcap[2] & m[2] == m[2]) && (vcap[3] & m[3] == m[3])
+    }
+}
+
+/// Verify contiguous range `[addr, addr+len*4096)` is fully authorized.
+/// Tries vector path for len ≤256 and window-aligned, else scalar fallback loop.
+/// Returns `Ok(())` if all bits set, `Err(first_missing_cap)` otherwise.
+#[inline(always)]
+pub fn verify_range_contiguous(addr: u32, len: usize) -> Result<(), CapId> {
+    if len == 0 {
+        return Ok(());
+    }
+    if is_superuser_active() {
+        return Ok(());
+    }
+    // Try vector fast path
+    if let Some(mask) = build_mask(addr, len) {
+        let window_base = ((addr >> 12) as usize) & !255;
+        // Convert registry as u64 window base: word = window_base/32, as u64 index = word/2
+        let u32_word = window_base >> 5;
+        let u64_base = unsafe { REGISTRY_BITS.0.as_ptr().add(u32_word) as *const u64 };
+        if verify_vector(addr, mask, u64_base) {
+            return Ok(());
+        } else {
+            // Find first missing to report CapId (scalar scan for error detail)
+            for offset in 0..len {
+                let a = addr + (offset as u32 * 4096);
+                if let Some(cap) = addr_to_cap_id(a) {
+                    if !is_claimed(cap as usize) {
+                        return Err(cap);
+                    }
+                } else if !matches!(a, 0x0800_0000..=0x080F_FFFF | 0x2000_0000..=0x2001_C000 | 0x8000_0000..=0x8000_FFFF) {
+                    // Host fallback: on x86_64 host, treat unmapped as SuperUser
+                    if !is_claimed(CapId::SuperUser as usize) {
+                        return Err(CapId::SuperUser);
+                    }
+                }
+            }
+            return Err(CapId::SuperUser);
+        }
+    }
+    // Scalar fallback: check each block individually (O(len) but len ≤256)
+    for offset in 0..len {
+        let a = addr + (offset as u32 * 4096);
+        check_access(a)?;
+    }
+    Ok(())
+}
+
+// Host fallback for addr_to_cap_id when not on arm/riscv32 (for cargo test on x86_64)
+#[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
+#[inline(always)]
+fn arm_addr_to_cap(_addr: u32) -> Option<CapId> { None }
+#[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
+#[inline(always)]
+fn riscv_addr_to_cap(_addr: u32) -> Option<CapId> { None }
+#[cfg(not(any(target_arch = "arm", target_arch = "riscv32")))]
+#[inline(always)]
+pub fn addr_to_cap_id(_addr: u32) -> Option<CapId> { None }
