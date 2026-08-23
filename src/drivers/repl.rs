@@ -257,6 +257,42 @@ fn execute(outcome: Outcome) {
             // JIT fn spawning deferred to Phase 8b.
             uart::write_line(b"SPAWN: counter tasks auto-spawned at boot");
         }
+        #[cfg(target_arch = "arm")]
+        Outcome::PoolAlloc { size } => {
+            // SAFETY: pool is linker-carved SRAM; single-threaded REPL.
+            match unsafe { crate::kernel::pool::alloc(0, size as usize) } {
+                Ok(addr) => {
+                    uart::write_str(b"POOL @");
+                    uart::write_hex_u32(addr as u32);
+                    uart::write_line(b"");
+                }
+                Err(_) => uart::write_line(b"POOL FULL"),
+            }
+        }
+        #[cfg(target_arch = "arm")]
+        Outcome::PoolFree => {
+            // SAFETY: resets offset to 0; prior pointers invalid by design.
+            unsafe {
+                crate::kernel::pool::reset(0).unwrap_or(());
+            }
+            uart::write_line(b"POOL RESET");
+        }
+        #[cfg(target_arch = "arm")]
+        Outcome::PoolStats => {
+            for (i, (used, rem)) in crate::kernel::pool::stats().iter().enumerate() {
+                uart::write_str(b"pool[");
+                uart::write_dec_u32(i as u32);
+                uart::write_str(b"] used=");
+                uart::write_dec_u32(*used as u32);
+                uart::write_str(b" free=");
+                uart::write_dec_u32(*rem as u32);
+                uart::write_line(b"");
+            }
+        }
+        #[cfg(not(target_arch = "arm"))]
+        Outcome::PoolAlloc { .. } | Outcome::PoolFree | Outcome::PoolStats => {
+            uart::write_line(b"NO POOL ON THIS TARGET");
+        }
         Outcome::FlashTest => {
             let ok = crate::drivers::flash::self_test();
             uart::write_str(b"FLASH SELF-TEST: ");

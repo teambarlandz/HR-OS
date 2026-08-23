@@ -178,6 +178,12 @@ pub enum Outcome {
     StoreList,
     /// `spawn NAME;` — compile fn body into JIT slot, register as task.
     Spawn(NameBuf),
+    /// `pool_alloc SIZE;` — allocate from capability pool.
+    PoolAlloc { size: u32 },
+    /// `pool_free;` — reset current task's pool.
+    PoolFree,
+    /// `pool_stats;` — dump pool usage.
+    PoolStats,
 }
 
 struct Symbol {
@@ -490,6 +496,16 @@ impl Compiler {
                 self.allow_optional_semicolon(cur);
                 Ok(Outcome::FlashTest)
             }
+            b"pool_alloc" => {
+                let size = self.parse_atomic_term(cur)?;
+                self.expect_semicolon(cur)?;
+                Ok(Outcome::PoolAlloc { size })
+            }
+            b"pool_free" => {
+                self.allow_optional_semicolon(cur);
+                Ok(Outcome::PoolFree)
+            }
+            b"pool_stats;" | b"pool_stats" => Ok(Outcome::PoolStats),
             b"spawn" => {
                 let name = self.expect_name(cur)?;
                 self.expect_semicolon(cur)?;
