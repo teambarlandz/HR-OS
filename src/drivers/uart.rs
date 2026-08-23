@@ -148,6 +148,12 @@ pub fn write_dec_u32(mut value: u32) {
     }
 }
 
+/// Convenience: hex u32 + newline.
+pub fn write_line_u32(value: u32) {
+    write_hex_u32(value);
+    write_str(b"\r\n");
+}
+
 /// Convenience: string + newline.
 pub fn write_line(s: &[u8]) {
     write_str(s);

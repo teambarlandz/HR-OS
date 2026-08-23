@@ -6,6 +6,8 @@
 //! - [`timer`] — SysTick/APIC/mtime driver (Axis 1).
 
 pub mod pcie;
+pub mod pwm;
 pub mod repl;
+pub mod spi;
 pub mod timer;
 pub mod uart;

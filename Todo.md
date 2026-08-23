@@ -119,6 +119,15 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 
 ---
 
+### Phase 6 — Driver Expansion (DONE 2026-08-22)
+
+- [x] `drivers/pwm.rs`: TIM2/PWM0 configure + live duty, arch-aware bases (ARM TIM2 @0x40000000 / riscv PWM0 @0x10015000), RCC gate arm-only
+- [x] `drivers/spi.rs`: SPI master full-duplex byte (ARM SPI1 @0x40013000 / riscv SPI0 @0x10014000), per-arch regs (CR1/SR/DR vs CTRL/TXDATA/RXDATA)
+- [x] REPL: `pwm P D;` `pwm_duty D;` `spi_tx B;` — capability-enforced at parse time via arch-correct probes (`check_timer_cap`/`check_spi_cap`)
+- [x] QEMU proof: E001 without cap → ARR/CCR1 readback with cap on both arches; spi_tx completes both arches
+
+---
+
 ## How to Update This File
 
 - Check off completed items with `[x]` and append date + commit hash.

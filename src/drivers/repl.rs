@@ -232,6 +232,22 @@ fn execute(outcome: Outcome) {
         }
         Outcome::SysAudit => handle_audit(),
         Outcome::Bench => crate::kernel::bench::run_bench(&mut |line| uart::write_str(line)),
+        Outcome::Pwm { period, duty } => {
+            let (arr, ccr) = crate::drivers::pwm::configure(period, duty);
+            uart::write_str(b"PWM ARR=");
+            uart::write_dec_u32(arr);
+            uart::write_str(b" CCR1=");
+            uart::write_line_u32(ccr);
+        }
+        Outcome::PwmDuty { duty } => {
+            crate::drivers::pwm::set_duty(duty);
+            uart::write_line(b"OK");
+        }
+        Outcome::SpiTx { byte } => {
+            let rx = crate::drivers::spi::transfer_byte(byte);
+            uart::write_str(b"SPI RX=");
+            uart::write_line_u32(rx as u32);
+        }
     }
 }
 
@@ -320,6 +336,9 @@ fn print_help() {
           EXPR;                   evaluate (+ - * / % left-to-right)\r\n\
           sys_audit               dump SuperUser audit log\r\n\
           bench                   native vs threaded JIT benchmark\r\n\
+          pwm PERIOD DUTY;        TIM2 PWM config (Timer0 cap)\r\n\
+          pwm_duty DUTY;          live duty update (Timer0 cap)\r\n\
+          spi_tx BYTE;            SPI1 transfer (Spi0 cap)\r\n\
           banner                  reprint banner",
     );
 }

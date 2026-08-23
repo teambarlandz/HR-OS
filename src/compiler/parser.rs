@@ -162,6 +162,12 @@ pub enum Outcome {
     EnforcedPeek { addr: u32 },
     /// Native-vs-threaded benchmark.
     Bench,
+    /// `pwm PERIOD DUTY;` — TIM2 PWM configure (Timer0 capability).
+    Pwm { period: u32, duty: u32 },
+    /// `pwm_duty DUTY;` — live duty update (Timer0 capability).
+    PwmDuty { duty: u32 },
+    /// `spi_tx BYTE;` — SPI1 full-duplex byte (Spi0 capability).
+    SpiTx { byte: u8 },
 }
 
 struct Symbol {
@@ -405,6 +411,25 @@ impl Compiler {
             b"bench" => {
                 self.allow_optional_semicolon(cur);
                 Ok(Outcome::Bench)
+            }
+            b"pwm" => {
+                let period = self.parse_atomic_term(cur)?;
+                let duty = self.parse_atomic_term(cur)?;
+                self.expect_semicolon(cur)?;
+                Self::check_timer_cap()?;
+                Ok(Outcome::Pwm { period, duty })
+            }
+            b"pwm_duty" => {
+                let duty = self.parse_atomic_term(cur)?;
+                self.expect_semicolon(cur)?;
+                Self::check_timer_cap()?;
+                Ok(Outcome::PwmDuty { duty })
+            }
+            b"spi_tx" => {
+                let b = self.parse_atomic_term(cur)?;
+                self.expect_semicolon(cur)?;
+                Self::check_spi_cap()?;
+                Ok(Outcome::SpiTx { byte: b as u8 })
             }
             other => {
                 if matches!(cur.peek(), Token::LParen) {
@@ -673,6 +698,26 @@ impl Compiler {
         if matches!(cur.peek(), Token::Semicolon) {
             cur.next();
         }
+    }
+
+    /// Arch-correct capability probe for the PWM timer peripheral.
+    fn check_timer_cap() -> Result<(), ParseError> {
+        #[cfg(target_arch = "riscv32")]
+        let probe = 0x1001_5000u32;
+        #[cfg(not(target_arch = "riscv32"))]
+        let probe = 0x4000_0000u32;
+        crate::capabilities::registry::check_access(probe)
+            .map_err(|_| ParseError::CapabilityViolation)
+    }
+
+    /// Arch-correct capability probe for SPI1/SPI0.
+    fn check_spi_cap() -> Result<(), ParseError> {
+        #[cfg(target_arch = "riscv32")]
+        let probe = 0x1001_4000u32;
+        #[cfg(not(target_arch = "riscv32"))]
+        let probe = 0x4001_3000u32;
+        crate::capabilities::registry::check_access(probe)
+            .map_err(|_| ParseError::CapabilityViolation)
     }
 }
 
