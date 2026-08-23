@@ -14,8 +14,31 @@ ASSERT(LENGTH(sram) >= 8192, "sram too small for pstore")
 _pstore_top = _stack_top;
 _pstore_base = _stack_top - 4K;
 
+/* Phase 8 multi-tasking carve: 4 task stacks x 512B descending from pstore,
+ * then heap_pool reservation (Phase 9 capability pools — routed nowhere yet).
+ * All above .bss; stack-slack ASSERT guards the floor. */
+_task_stacks_top = _pstore_base;
+_task_stacks_base = _task_stacks_top - 2K;   /* 4 x 512B */
+_heap_pool_base = _task_stacks_base - 8K;
+ASSERT(LENGTH(sram) >= 16384, "sram too small for task stacks + heap pool")
+
 /* Stack-slack contract (>=4K on ARM's 52K SRAM). */
-ASSERT((_stack_top - __ebss) >= 4096, "stack slack below 4K on arm")
+ASSERT((_heap_pool_base - __ebss) >= 4096, "stack slack below 4K on arm")
+
+TASK_STACK_SIZE = 512;
+NUM_TASK_SLOTS = 4;
+
+_task_stack_0 = _task_stacks_top - 0 * 512;
+_task_stack_1 = _task_stacks_top - 1 * 512;
+_task_stack_2 = _task_stacks_top - 2 * 512;
+_task_stack_3 = _task_stacks_top - 3 * 512;
+
+/* JIT slots: 4 x 1K inside the existing EXEC_BUFFER region (defined in memory.x as 4K). */
+JIT_SLOT_SIZE = 1024;
+_jit_slot_0 = ORIGIN(sram_code);
+_jit_slot_1 = ORIGIN(sram_code) + 1 * JIT_SLOT_SIZE;
+_jit_slot_2 = ORIGIN(sram_code) + 2 * JIT_SLOT_SIZE;
+_jit_slot_3 = ORIGIN(sram_code) + 3 * JIT_SLOT_SIZE;
 
 SECTIONS
 {

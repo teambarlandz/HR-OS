@@ -9,6 +9,7 @@ pub mod bench;
 pub mod exec;
 pub mod interrupt;
 pub mod memory;
+pub mod multitask;
 
 /// Boot banner printed to the UART console before the REPL attaches.
 pub const BANNER: &[u8] = b"Holy Rust REPL v0.1\r\n";

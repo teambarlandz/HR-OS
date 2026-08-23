@@ -252,6 +252,11 @@ fn execute(outcome: Outcome) {
         Outcome::Store(_) | Outcome::Load(_) | Outcome::StoreList => {
             uart::write_line(b"NO STORE ON THIS TARGET");
         }
+        Outcome::Spawn(_) => {
+            // Phase 8a: spawn uses asm counter tasks (spawned at boot).
+            // JIT fn spawning deferred to Phase 8b.
+            uart::write_line(b"SPAWN: counter tasks auto-spawned at boot");
+        }
         Outcome::FlashTest => {
             let ok = crate::drivers::flash::self_test();
             uart::write_str(b"FLASH SELF-TEST: ");

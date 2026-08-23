@@ -176,6 +176,8 @@ pub enum Outcome {
     Load(NameBuf),
     /// `store_list;` — list persisted names.
     StoreList,
+    /// `spawn NAME;` — compile fn body into JIT slot, register as task.
+    Spawn(NameBuf),
 }
 
 struct Symbol {
@@ -487,6 +489,11 @@ impl Compiler {
             b"flash_test" => {
                 self.allow_optional_semicolon(cur);
                 Ok(Outcome::FlashTest)
+            }
+            b"spawn" => {
+                let name = self.expect_name(cur)?;
+                self.expect_semicolon(cur)?;
+                Ok(Outcome::Spawn(name))
             }
             b"spi_tx" => {
                 let b = self.parse_atomic_term(cur)?;

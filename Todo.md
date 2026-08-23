@@ -137,6 +137,17 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 
 ---
 
+### Phase 8a — True Multi-Tasking (DONE 2026-08-23)
+
+- [x] PendSV_Handler (global_asm): round-robin scheduler, saves/restores R4-R11 via PSP, TCB SP update, early-exit when no other task Ready
+- [x] Counter task bodies (asm): infinite loop incrementing own TCB counter — proves independent execution contexts
+- [x] PSP transition at boot: `CONTROL.SPSEL=1` + `PSP=MSP` in Reset() so all contexts use PSP consistently
+- [x] Vector table wiring: slot 14 → PendSV_Handler, slot 15 → SysTick pend handler; PendSV priority lowest
+- [x] SysTick lazy activation: disabled at boot, enabled only when tasks spawned (avoids interrupt overhead with zero tasks)
+- [x] QEMU proof: REPL fully responsive (arithmetic, let bindings, capability claims) while 2 counter tasks preempt at 1ms intervals — zero faults over 24s run
+
+---
+
 ## How to Update This File
 
 - Check off completed items with `[x]` and append date + commit hash.
