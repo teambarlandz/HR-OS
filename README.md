@@ -1,6 +1,9 @@
 # HR-OS — Holy Rust Unikernel Operating System
 
-> **SASA · O(1) Capabilities · 43-Cycle Scheduler · Single-Pass JIT**
+> **v0.2.0** · **SASA · O(1) Capabilities · 43-Cycle Scheduler · Single-Pass JIT · Native JIT ×3.78**
+>
+> **Status:** kernel proven on QEMU (ARM + RISC-V) — native R/W/X live, capability-enforced,
+> persistence store, driver surface (PWM/SPI), silicon test plan staged.
 
 A zero-cost, memory-safe, real-time **Single Address Space Architecture (SASA)** unikernel that executes exclusively in **Ring 0 / EL1 / M-mode** — no MMU page walks, no TLB flushes, no POSIX, no ELF dynamic linking, no IOMMU. Safety is a **bit-test**, not a page fault.
 
@@ -32,6 +35,22 @@ A zero-cost, memory-safe, real-time **Single Address Space Architecture (SASA)**
 | Jitter `σ`          | 2–15µs                                     | **0** (SASA, no TLB)                                  |
 
 Measured on ARM Cortex-M4 @ 168 MHz (`docs/technical/BENCHMARK.md:1`). Full matrix in `docs/production/HR-OS_PRODUCTION_BLUEPRINT.md:1`.
+
+---
+
+## What's New in v0.2.0
+
+| Advance                       | Detail                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Native JIT on both arches** | EXEC_BUFFER relocated to DTIM (riscv32); gate lifted — `bench;` shows **×3.78** vs threaded (2636 → 696 cyc)   |
+| **Program persistence**       | `store NAME;` / `load NAME;` / `store_list;` — named fn bodies survive REPL state in an SRAM slot file         |
+| **Driver expansion**          | `pwm PERIOD DUTY;`, `pwm_duty DUTY;`, `spi_tx BYTE;` — capability-gated TIM2/PWM0 + SPI1/SPI0, arch-aware MMIO |
+| **Stack-slack ASSERTs**       | linker enforces ≥1536B (rv32) / ≥4K (arm) headroom — silent overflow becomes build failure                     |
+| **Dedicated scratch region**  | riscv32 DTIM: 256B at `0x80001300` — always-safe poke/peek target                                              |
+| **Feature gates**             | `simulated-hw` (default) / `baremetal-arm` / `baremetal-x86`                                                   |
+| **Silicon test plan**         | PROSPECTIVE-HARDWARE-TESTS.md — 22 tests across S/C/X tiers with inventory matrix                              |
+
+Full language/command reference: [Milestone.md](Milestone.md).
 
 ---
 
@@ -103,11 +122,15 @@ cargo --manifest-path holy-rust/Cargo.toml build --target riscv32imac-unknown-no
 cargo run --target thumbv7em-none-eabihf   # → netduinoplus2, expect "Holy Rust REPL v0.1"
 cargo run --target riscv32imac-unknown-none-elf # → sifive_e @0x20400000
 
-# 5. REPL
+# 5. REPL (Holy Rust DSL + built-ins)
 picocom -b 115200 /dev/ttyACM0
-# holy> cap_claim GPIOA
-# holy> poke 0x40020000 1
-# holy> peek 0x40020000
+# holy> cap_claim GPIOA;
+# holy> poke 0x40020000 1;
+# holy> peek 0x40020000;
+# holy> bench;                # native-vs-threaded cycles
+# holy> fn blink() { poke 0x40020000 1; }
+# holy> store blink;          # persist to program store
+# holy> pwm 1000 500;         # capability-gated PWM (claim TIMER0 first)
 ```
 
 ---
