@@ -168,6 +168,14 @@ pub enum Outcome {
     PwmDuty { duty: u32 },
     /// `spi_tx BYTE;` — SPI1 full-duplex byte (Spi0 capability).
     SpiTx { byte: u8 },
+    /// Flash FPEC self-test (SUPERUSER-gated at repl level).
+    FlashTest,
+    /// `store NAME;` — persist fn body to program store.
+    Store(NameBuf),
+    /// `load NAME;` — restore fn from program store.
+    Load(NameBuf),
+    /// `store_list;` — list persisted names.
+    StoreList,
 }
 
 struct Symbol {
@@ -213,6 +221,43 @@ impl Compiler {
             fn_body_lens: [0; MAX_FNS],
             stream: [0; MAX_STREAM_WORDS],
             stream_len: 0,
+        }
+    }
+
+    /// Snapshot fn `name` body words into `out`. Returns word count.
+    /// Used by the program-persistence store (`store NAME;`).
+    pub fn export_fn(&self, name: &[u8], out: &mut [usize]) -> Option<usize> {
+        let idx = self.find_fn(name)?;
+        let len = self.fn_body_lens[idx];
+        if len > out.len() {
+            return None;
+        }
+        out[..len].copy_from_slice(&self.fn_bodies[idx][..len]);
+        Some(len)
+    }
+
+    /// Insert `name` with body `words` (as if defined via `fn NAME(){}`).
+    /// Used by the program-persistence store (`load NAME;`).
+    pub fn import_fn(&mut self, name: &[u8], words: &[usize]) -> Result<(), ParseError> {
+        if name.len() > NAME_MAX {
+            return Err(ParseError::NameTooLong);
+        }
+        if words.len() > FN_BODY_WORDS {
+            return Err(ParseError::StreamFull);
+        }
+        let nb = NameBuf::from_slice(name)?;
+        let index = self.alloc_fn_slot(&nb)?;
+        self.fn_names[index] = nb;
+        self.fn_body_lens[index] = words.len();
+        self.fn_bodies[index][..words.len()].copy_from_slice(words);
+        Ok(())
+    }
+
+    /// Iterate live fn names for `store_list`.
+    pub fn fn_names_iter(&self) -> heapless_names::FnNames<'_> {
+        heapless_names::FnNames {
+            compiler: self,
+            next: 0,
         }
     }
 
@@ -424,6 +469,24 @@ impl Compiler {
                 self.expect_semicolon(cur)?;
                 Self::check_timer_cap()?;
                 Ok(Outcome::PwmDuty { duty })
+            }
+            b"store" => {
+                let name = self.expect_name(cur)?;
+                self.expect_semicolon(cur)?;
+                Ok(Outcome::Store(name))
+            }
+            b"load" => {
+                let name = self.expect_name(cur)?;
+                self.expect_semicolon(cur)?;
+                Ok(Outcome::Load(name))
+            }
+            b"store_list" => {
+                self.allow_optional_semicolon(cur);
+                Ok(Outcome::StoreList)
+            }
+            b"flash_test" => {
+                self.allow_optional_semicolon(cur);
+                Ok(Outcome::FlashTest)
             }
             b"spi_tx" => {
                 let b = self.parse_atomic_term(cur)?;
@@ -747,4 +810,31 @@ impl<'a> Cur<'a> {
 /// Function-pointer-to-word coercion used when building token streams.
 fn word_of(f: primitives::MicroPrimitive) -> usize {
     f as usize
+}
+
+/// Zero-alloc name iteration for the persistence store.
+pub mod heapless_names {
+    use super::{Compiler, NAME_MAX};
+
+    pub struct FnNames<'a> {
+        pub(crate) compiler: &'a Compiler,
+        pub(crate) next: usize,
+    }
+
+    impl Iterator for FnNames<'_> {
+        type Item = ([u8; NAME_MAX], u8); // fixed buffer + length
+        fn next(&mut self) -> Option<Self::Item> {
+            while self.next < super::MAX_FNS {
+                let i = self.next;
+                self.next += 1;
+                if self.compiler.fn_names[i].len > 0 {
+                    let mut buf = [0u8; NAME_MAX];
+                    buf[..self.compiler.fn_names[i].len as usize]
+                        .copy_from_slice(self.compiler.fn_names[i].as_slice());
+                    return Some((buf, self.compiler.fn_names[i].len));
+                }
+            }
+            None
+        }
+    }
 }

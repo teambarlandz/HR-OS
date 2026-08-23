@@ -8,6 +8,12 @@ ENTRY(Reset)
 
 _stack_top = ORIGIN(sram) + LENGTH(sram);
 
+/* Program persistence store (Phase 7): 4K below the stack ceiling.
+ * ARM only — riscv32 DTIM is fully carved. */
+ASSERT(LENGTH(sram) >= 8192, "sram too small for pstore")
+_pstore_top = _stack_top;
+_pstore_base = _stack_top - 4K;
+
 /* Stack-slack contract (>=4K on ARM's 52K SRAM). */
 ASSERT((_stack_top - __ebss) >= 4096, "stack slack below 4K on arm")
 

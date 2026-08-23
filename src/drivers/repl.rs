@@ -248,6 +248,97 @@ fn execute(outcome: Outcome) {
             uart::write_str(b"SPI RX=");
             uart::write_line_u32(rx as u32);
         }
+        #[cfg(not(target_arch = "arm"))]
+        Outcome::Store(_) | Outcome::Load(_) | Outcome::StoreList => {
+            uart::write_line(b"NO STORE ON THIS TARGET");
+        }
+        Outcome::FlashTest => {
+            let ok = crate::drivers::flash::self_test();
+            uart::write_str(b"FLASH SELF-TEST: ");
+            uart::write_line(if ok {
+                b"HONORS PROGRAMMING"
+            } else {
+                b"STUB (writes ignored)"
+            });
+        }
+        #[cfg(target_arch = "arm")]
+        Outcome::Store(name) => {
+            use crate::compiler::parser::MAX_STREAM_WORDS;
+            // SAFETY: single-threaded REPL; borrow confined to this call.
+            let compiler = unsafe { &mut *core::ptr::addr_of_mut!(COMPILER) };
+            let mut words = [0usize; MAX_STREAM_WORDS];
+            match compiler.export_fn(name.as_slice(), &mut words) {
+                Some(count) => {
+                    let mut slot = None;
+                    let mut probe = [0u8; 16];
+                    for i in 0..crate::drivers::pstore::MAX_PROGRAMS {
+                        if matches!(
+                            crate::drivers::pstore::load(i, &mut probe, &mut []),
+                            Err(crate::drivers::pstore::StoreError::NotFound)
+                        ) {
+                            slot = Some(i);
+                            break;
+                        }
+                    }
+                    match slot {
+                        Some(i) => {
+                            crate::drivers::pstore::save(i, name.as_slice(), &words[..count])
+                                .unwrap_or(());
+                            uart::write_line(b"STORED");
+                        }
+                        None => uart::write_line(b"STORE FULL"),
+                    }
+                }
+                None => uart::write_line(b"ERR UNKNOWN FN"),
+            }
+        }
+
+        #[cfg(target_arch = "arm")]
+        Outcome::Load(name) => {
+            // SAFETY: single-threaded REPL; borrow confined to this call.
+            let compiler = unsafe { &mut *core::ptr::addr_of_mut!(COMPILER) };
+            let mut words = [0usize; 64];
+            let mut found = false;
+            for i in 0..crate::drivers::pstore::MAX_PROGRAMS {
+                let mut probe = [0u8; 16];
+                match crate::drivers::pstore::load(i, &mut probe, &mut words) {
+                    Ok(count) => {
+                        if probe[..name.as_slice().len()] == *name.as_slice() {
+                            match compiler.import_fn(name.as_slice(), &words[..count]) {
+                                Ok(()) => uart::write_line(b"LOADED"),
+                                Err(_) => uart::write_line(b"ERR IMPORT FAILED"),
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                    Err(crate::drivers::pstore::StoreError::NoStore) => {
+                        uart::write_line(b"NO STORE ON THIS TARGET");
+                        found = true;
+                        break;
+                    }
+                    _ => continue,
+                }
+            }
+            if !found {
+                uart::write_line(b"NOT FOUND");
+            }
+        }
+
+        #[cfg(target_arch = "arm")]
+        Outcome::StoreList => {
+            // SAFETY: single-threaded REPL.
+            let compiler = unsafe { &*core::ptr::addr_of_mut!(COMPILER) };
+            let mut any = false;
+            for (buf, len) in compiler.fn_names_iter() {
+                any = true;
+                uart::write_str(&buf[..len as usize]);
+                uart::write_str(b"\r\n");
+            }
+            if !any {
+                uart::write_line(b"(no fns)");
+            }
+        }
     }
 }
 

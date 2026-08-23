@@ -5,7 +5,9 @@
 //! - [`pcie`] — ECAM enumerator + Autonomous DMA Ring (Axis 2).
 //! - [`timer`] — SysTick/APIC/mtime driver (Axis 1).
 
+pub mod flash;
 pub mod pcie;
+pub mod pstore;
 pub mod pwm;
 pub mod repl;
 pub mod spi;

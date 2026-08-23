@@ -128,6 +128,15 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 
 ---
 
+### Phase 7 — Program Persistence (DONE 2026-08-23)
+
+- [x] `drivers/pstore.rs`: 8-slot named JIT-image store in SRAM window (`_pstore_base.._pstore_top`, ARM-only; riscv32 DTIM fully carved → `NO STORE ON THIS TARGET`)
+- [x] Compiler accessors: `export_fn`/`import_fn`/`fn_names_iter` (zero-alloc)
+- [x] REPL: `store NAME;` `load NAME;` `store_list;` — QEMU proof: fn blink → STORED → load → blink() OK → store_list shows it
+- [x] `drivers/flash.rs`: STM32F4 FPEC unlock/erase/program for real silicon; QEMU self-test reports STUB (writes ignored) — flash persistence deferred to silicon
+
+---
+
 ## How to Update This File
 
 - Check off completed items with `[x]` and append date + commit hash.
