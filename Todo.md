@@ -154,8 +154,8 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 > Without stateful logic (loops, conditionals, mutable state), the OS cannot implement even
 > a keyboard handler. See Milestone.md embedded-standard assessment.
 
-- [ ] 10.1 Loops: `loop N { stmt* }` — compile-time unrolling (max 64×); works with both threaded and native paths
-- [ ] 10.2 fn arguments: `fn add(a, b) { a + b; }` — named params resolved per-call-site; native path passes in registers
+- [x] 10.1 Loops: `loop N { stmt* }` — compile-time unrolling (max 64×); works with both threaded and native paths
+- [ ] 10.2 fn arguments (DESIGN NEEDED: eager compilation + immutable streams conflict with param binding; requires deferred-param or VM-stack-passing architecture): `fn add(a, b) { a + b; }` — named params resolved per-call-site; native path passes in registers
 - [ ] 10.3 JIT task spawning: `spawn fn_name;` compiles fn body into task slot's EXEC_BUFFER region and starts it
 - [ ] 10.4 L3 verb promotion: `pwm`/`spi_tx` compilable inside fn bodies as stream primitives
 - [ ] 10.5 Conditionals: `if EXPR { stmt* }` — bounded branches preserving O(1) parse
