@@ -26,3 +26,9 @@ pub mod repl_stub {
         }
     }
 }
+
+#[cfg(all(test, target_os = "none"))]
+#[panic_handler]
+fn test_panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}

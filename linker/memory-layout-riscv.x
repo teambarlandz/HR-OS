@@ -12,6 +12,11 @@ ENTRY(Reset)
 
 _stack_top = ORIGIN(sram) + LENGTH(sram);
 
+/* Stack-slack contract: .bss end to stack top must leave >=1.5K for REPL,
+ * JIT compiler frames and the panic printer. Ring 0 has no page-fault net:
+ * overflow = hard fault, so enforce headroom at link time. */
+ASSERT((_stack_top - __ebss) >= 1536, "stack slack below 1.5K on riscv32 DTIM")
+
 SECTIONS
 {
     .text : ALIGN(4)
@@ -44,6 +49,13 @@ SECTIONS
     {
         KEEP(*(.sram_code))
     } > sram_code
+
+    /* Dedicated always-safe scratch (tests, diagnostics). Not zeroed by
+     * init_data_bss; contents undefined until first write. */
+    .scratch (NOLOAD) : ALIGN(4)
+    {
+        KEEP(*(.scratch))
+    } > scratch
 
     .data : ALIGN(4)
     {

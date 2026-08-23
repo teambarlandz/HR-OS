@@ -160,6 +160,8 @@ pub enum Outcome {
     EnforcedPoke { addr: u32, val: u32 },
     /// Capability-enforced peek (direct, not via stream).
     EnforcedPeek { addr: u32 },
+    /// Native-vs-threaded benchmark.
+    Bench,
 }
 
 struct Symbol {
@@ -399,6 +401,10 @@ impl Compiler {
             b"sys_audit" => {
                 self.allow_optional_semicolon(cur);
                 Ok(Outcome::SysAudit)
+            }
+            b"bench" => {
+                self.allow_optional_semicolon(cur);
+                Ok(Outcome::Bench)
             }
             other => {
                 if matches!(cur.peek(), Token::LParen) {

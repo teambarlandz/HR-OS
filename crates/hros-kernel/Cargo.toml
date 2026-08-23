@@ -5,6 +5,12 @@ edition = "2021"
 description = "HR-OS Ring 0 core infrastructure (Phase 1) — memory, exec, interrupts"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = ["simulated-hw"]
+simulated-hw = []   # Software cycle mocks / QEMU-friendly stubs (percentile jitter gates)
+baremetal-arm = []  # Direct ARM Cortex-M DWT registers & SysTick (strict ==0 jitter gate)
+baremetal-x86 = []  # x86_64 LAPIC, IDT, and 16550 UART assembly
+
 [dependencies]
 hros-hal = { path = "../hros-hal" }
 hros-cap = { path = "../hros-cap" }

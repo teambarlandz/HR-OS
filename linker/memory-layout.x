@@ -8,6 +8,9 @@ ENTRY(Reset)
 
 _stack_top = ORIGIN(sram) + LENGTH(sram);
 
+/* Stack-slack contract (>=4K on ARM's 52K SRAM). */
+ASSERT((_stack_top - __ebss) >= 4096, "stack slack below 4K on arm")
+
 SECTIONS
 {
     /* Hardware vector table. First two words are emitted here directly by

@@ -4,11 +4,5 @@ target = "thumbv7em-none-eabihf"
 [target.thumbv7em-none-eabihf]
 runner = "qemu-system-arm -M netduinoplus2 -cpu cortex-m4 -nographic -kernel"
 
-[target.thumbv7em-none-eabi]
-runner = "qemu-system-arm -M netduinoplus2 -cpu cortex-m4 -nographic -kernel"
-
 [target.riscv32imac-unknown-none-elf]
-runner = "qemu-system-riscv32 -machine sifive_e -nographic -bios none -kernel"
-
-[target.riscv64-unknown-none-elf]
 runner = "qemu-system-riscv32 -machine sifive_e -nographic -bios none -kernel"

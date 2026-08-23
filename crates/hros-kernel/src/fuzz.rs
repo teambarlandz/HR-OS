@@ -63,14 +63,20 @@ pub fn wwdt_window_test() -> bool {
 }
 
 /// Asserts timing jitter based on standard vs bare-metal target targets
+/// Jitter gate — compile-time selected:
+/// - `baremetal-arm` feature (implies target_os="none"): strict SASA invariant,
+///   any non-zero DWT delta fails. Backed by direct DWT->CYCCNT reads.
+/// - default `simulated-hw` (hosted / QEMU): OS preemption artifacts allowed;
+///   statistical tail gate at <100us.
+#[cfg(feature = "baremetal-arm")]
 pub fn verify_jitter_bounds(delta_ns: u64) -> bool {
-    if cfg!(target_os = "none") {
-        // Bare-metal SASA invariant: strictly 0 jitter
-        delta_ns == 0
-    } else {
-        // Host OS bound: preemption jitter must stay under 100us
-        delta_ns < 100_000
-    }
+    debug_assert!(cfg!(target_os = "none"));
+    delta_ns == 0
+}
+
+#[cfg(all(not(feature = "baremetal-arm"), feature = "simulated-hw"))]
+pub fn verify_jitter_bounds(delta_ns: u64) -> bool {
+    delta_ns < 100_000
 }
 
 #[cfg(test)]
@@ -99,8 +105,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "simulated-hw")]
     fn test_host_jitter_bound() {
-        // Simulating a host preemption delta of 60,001ns
         assert!(verify_jitter_bounds(60_001));
+    }
+
+    #[test]
+    #[cfg(feature = "baremetal-arm")]
+    fn test_baremetal_strict_zero() {
+        assert!(verify_jitter_bounds(0));
+        assert!(!verify_jitter_bounds(1));
     }
 }

@@ -113,6 +113,12 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 
 ---
 
+### Phase 5 — Native Bench (DONE 2026-08-22)
+
+- [x] `bench;` REPL command: threaded 2636 cyc vs native 696 cyc = **x3.78** on riscv32/QEMU (`docs/native_bench.md`); ARM rows zero under QEMU (DWT unimplemented) pending silicon
+
+---
+
 ## How to Update This File
 
 - Check off completed items with `[x]` and append date + commit hash.
@@ -127,6 +133,7 @@ _DoD:_ `σ==0` **✓ no jitter (SASA)**, 0 escapes **✓ fuzz 1M `0 crashes 0 es
 
 ## Links
 
+- Hardware test plan: `PROSPECTIVE-HARDWARE-TESTS.md` (S/C/X tiers for silicon bring-up)
 - Blueprint: `docs/production/HR-OS_PRODUCTION_BLUEPRINT.md`
 - Technical Specs: `docs/technical/AXIS-*.md`, `BENCHMARK.md`, `WCEF.md`, `ZERO-COPY.md`, `INVALID-OP-CODES.md`, `E2E-SYSTEM-TRACE.md`
 - Code Reference: `holy-rust/` workspace (reference impl) + `crates/hros-hal` (HAL traits proven `cargo check` pass)

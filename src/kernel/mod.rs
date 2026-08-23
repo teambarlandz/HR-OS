@@ -5,6 +5,7 @@
 //! - [`memory`] — direct volatile access primitives and boot-time
 //!   `.data`/`.bss` initialization.
 
+pub mod bench;
 pub mod exec;
 pub mod interrupt;
 pub mod memory;

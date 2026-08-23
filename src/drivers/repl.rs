@@ -231,6 +231,7 @@ fn execute(outcome: Outcome) {
             }
         }
         Outcome::SysAudit => handle_audit(),
+        Outcome::Bench => crate::kernel::bench::run_bench(&mut |line| uart::write_str(line)),
     }
 }
 
@@ -318,6 +319,7 @@ fn print_help() {
           fn NAME() { ... }       define callable body\r\n\
           EXPR;                   evaluate (+ - * / % left-to-right)\r\n\
           sys_audit               dump SuperUser audit log\r\n\
+          bench                   native vs threaded JIT benchmark\r\n\
           banner                  reprint banner",
     );
 }
