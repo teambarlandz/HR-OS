@@ -165,6 +165,7 @@ fn error_text(err: crate::compiler::parser::ParseError) -> &'static [u8] {
         MissingSemicolon => b"MISSING SEMICOLON\n",
         EmptyLine => b"\n",
         CapabilityViolation => b"E001: CAPABILITY_VIOLATION - Peripheral token not claimed\n",
+        LoopTooLarge => b"LOOP TOO LARGE (max 64 unroll)\n",
     }
 }
 

@@ -27,6 +27,10 @@ pub const NAME_MAX: usize = 16;
 pub const MAX_FNS: usize = 2;
 /// Words per function body (excluding the appended halt).
 pub const FN_BODY_WORDS: usize = 32;
+/// Maximum loop unroll factor (compile-time expansion).
+pub const MAX_LOOP_UNROLL: usize = 64;
+/// Maximum loop nesting depth.
+pub const MAX_LOOP_DEPTH: usize = 4;
 
 /// Fixed-capacity identifier storage (zero allocation).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,6 +79,7 @@ pub enum ParseError {
     EmptyLine,
     /// Mandatory capability enforcement: peripheral access denied (doc ch.2).
     CapabilityViolation,
+    LoopTooLarge,
 }
 
 /// A compiled threaded token stream ready for SRAM dispatch.
@@ -380,6 +385,38 @@ impl Compiler {
                     // caller's halt bounds the stream either way.
                     Ok(())
                 }
+                b"loop" => {
+                    // loop N { stmt* } — compile-time unrolling
+                    let count = self.parse_atomic_term(cur)?;
+                    if count == 0 || count as usize > MAX_LOOP_UNROLL {
+                        return Err(ParseError::LoopTooLarge);
+                    }
+                    // Save stream position to replay body
+                    let body_start = self.stream_len;
+                    if !matches!(cur.next(), Token::LBrace) {
+                        return Err(ParseError::UnexpectedToken);
+                    }
+                    // Parse body once into stream
+                    while !matches!(cur.peek(), Token::RBrace) {
+                        if matches!(cur.peek(), Token::Eof) {
+                            return Err(ParseError::UnexpectedToken);
+                        }
+                        self.parse_body_stmt(cur)?;
+                    }
+                    cur.next(); // consume '}'
+                    let body_end = self.stream_len;
+                    let body_len = body_end - body_start;
+                    // Unroll: duplicate body (count-1) more times
+                    for _ in 1..count {
+                        if self.stream_len + body_len > MAX_STREAM_WORDS {
+                            return Err(ParseError::StreamFull);
+                        }
+                        for i in body_start..body_end {
+                            self.stream_push(self.stream[i])?;
+                        }
+                    }
+                    Ok(())
+                }
                 other => {
                     // Call or bare expression.
                     if matches!(cur.peek(), Token::LParen) {
@@ -491,6 +528,57 @@ impl Compiler {
             b"store_list" => {
                 self.allow_optional_semicolon(cur);
                 Ok(Outcome::StoreList)
+            }
+            b"loop" => {
+                let count = self.parse_atomic_term(cur)?;
+                if count == 0 || count as usize > MAX_LOOP_UNROLL {
+                    return Err(ParseError::LoopTooLarge);
+                }
+                if !matches!(cur.next(), Token::LBrace) {
+                    return Err(ParseError::UnexpectedToken);
+                }
+                self.stream_reset();
+                let body_start = 0;
+                while !matches!(cur.peek(), Token::RBrace) {
+                    if matches!(cur.peek(), Token::Eof) {
+                        return Err(ParseError::UnexpectedToken);
+                    }
+                    // Parse body statements into stream
+                    if let Token::Identifier(id) = cur.next() {
+                        {
+                            if id == b"poke" {
+                                let addr = self.parse_atomic_term(cur)?;
+                                let val = self.eval_expr(None, cur)?;
+                                self.expect_semicolon(cur)?;
+                                crate::capabilities::registry::check_access(addr)
+                                    .map_err(|_| ParseError::CapabilityViolation)?;
+                                self.stream_push_lit(addr)?;
+                                self.stream_push_lit(val)?;
+                                self.stream_push(word_of(primitives::write_reg_prim))?;
+                            } else if id == b"peek" {
+                                let addr = self.parse_atomic_term(cur)?;
+                                self.expect_semicolon(cur)?;
+                                crate::capabilities::registry::check_access(addr)
+                                    .map_err(|_| ParseError::CapabilityViolation)?;
+                                self.stream_push_lit(addr)?;
+                                self.stream_push(word_of(primitives::load_reg_prim))?;
+                            }
+                        }
+                    }
+                }
+                cur.next(); // consume '}'
+                let body_end = self.stream_len;
+                let body_len = body_end - body_start;
+                for _ in 1..count {
+                    if self.stream_len + body_len > MAX_STREAM_WORDS {
+                        return Err(ParseError::StreamFull);
+                    }
+                    for i in body_start..body_end {
+                        self.stream_push(self.stream[i])?;
+                    }
+                }
+                self.stream_halt()?;
+                Ok(Outcome::Run(self.take_program(false)))
             }
             b"flash_test" => {
                 self.allow_optional_semicolon(cur);
