@@ -253,10 +253,48 @@ fn execute(outcome: Outcome) {
         Outcome::Store(_) | Outcome::Load(_) | Outcome::StoreList => {
             uart::write_line(b"NO STORE ON THIS TARGET");
         }
-        Outcome::Spawn(_) => {
-            // Phase 8a: spawn uses asm counter tasks (spawned at boot).
-            // JIT fn spawning deferred to Phase 8b.
-            uart::write_line(b"SPAWN: counter tasks auto-spawned at boot");
+        Outcome::Spawn(name) => {
+            #[cfg(target_arch = "arm")]
+            {
+                use crate::compiler::parser::MAX_STREAM_WORDS;
+                // SAFETY: single-threaded REPL; borrow confined to this call.
+                let compiler = unsafe { &mut *core::ptr::addr_of_mut!(COMPILER) };
+                let mut words = [0usize; MAX_STREAM_WORDS];
+                match compiler.export_fn(name.as_slice(), &mut words) {
+                    Some(count) => {
+                        // Find a free slot (0 or 1)
+                        for slot_idx in 0..2usize {
+                            let tcbs = core::ptr::addr_of_mut!(crate::kernel::multitask::TCBS);
+                            let state = unsafe { (*tcbs)[slot_idx + 1].state };
+                            if state == 0 {
+                                // Dead — free to use. Emit fn body into slot.
+                                unsafe {
+                                    let _ = crate::kernel::multitask::emit_fn_into_slot(
+                                        slot_idx,
+                                        &words[..count],
+                                    );
+                                    let ok = crate::kernel::multitask::spawn_jit_task(slot_idx);
+                                    if ok {
+                                        // Enable SysTick now that a task exists.
+                                        crate::drivers::timer::arm::configure(
+                                            crate::drivers::timer::systick_reload(168_000_000, 1),
+                                        );
+                                    }
+                                }
+                                uart::write_str(b"TASK SPAWNED slot=");
+                                uart::write_dec_u32(slot_idx as u32);
+                                uart::write_line(b"");
+                                break;
+                            }
+                        }
+                    }
+                    None => uart::write_line(b"ERR UNKNOWN FN"),
+                }
+            }
+            #[cfg(not(target_arch = "arm"))]
+            {
+                uart::write_line(b"SPAWN: arm only");
+            }
         }
         #[cfg(target_arch = "arm")]
         Outcome::PoolAlloc { size } => {

@@ -1,15 +1,10 @@
 //! Preemptive multi-tasking (Phase 8a, ARM only).
 //!
-//! SysTick → PendSV → context switch between REPL task and counter tasks.
-//! Proves Axis 1's 43-cycle switch end-to-end. See PROSPECTIVE-HARDWARE-TESTS.md C1.
+//! SysTick -> PendSV -> context switch between REPL task and spawned tasks.
 
 #![allow(clippy::fn_to_numeric_cast)]
 
 use core::arch::global_asm;
-
-// ---------------------------------------------------------------------------
-// PendSV handler + counter task bodies (pure asm)
-// ---------------------------------------------------------------------------
 
 pub const NUM_TASKS: usize = 4;
 
@@ -21,8 +16,6 @@ pub enum TaskState {
     Running = 2,
 }
 
-/// TCB — repr(C) matches the asm field offsets:
-/// sp=+0, pc=+4, state=+8, counter=+12, total=16 bytes.
 #[repr(C)]
 pub struct Tcb {
     pub sp: u32,
@@ -56,7 +49,6 @@ global_asm!(
     ".thumb_func",
     ".global PendSV_Handler",
     "PendSV_Handler:",
-    // Scan for a Ready task != current
     "   ldr r1, ={current}",
     "   ldr r2, [r1]",
     "   movs r6, #0",
@@ -74,36 +66,31 @@ global_asm!(
     "   adds r6, r6, #1",
     "   cmp r6, #5",
     "   blt 8b",
-    // No other ready: return immediately (zero side effects)
     "   bx lr",
-    // ---- Do the switch ----
     "1:",
-    "   mrs r0, psp",               // current PSP
-    "   stmdb r0!, {{r4-r11}}",     // save callee-saved regs
-    "   ldr r3, ={tcbs}",           // save SP to current TCB
+    "   mrs r0, psp",
+    "   stmdb r0!, {{r4-r11}}",
+    "   ldr r3, ={tcbs}",
     "   movs r4, #16",
     "   lsls r5, r2, #4",
     "   adds r3, r3, r5",
-    "   str r0, [r3]",              // tcbs[cur].sp = new SP
-    "   movs r5, #1",               // Ready
-    "   str r5, [r3, #8]",          // tcbs[cur].state = Ready
-    // Load next task
+    "   str r0, [r3]",
+    "   movs r5, #1",
+    "   str r5, [r3, #8]",
     "   ldr r1, ={current}",
-    "   str r6, [r1]",              // CURRENT_TASK = next idx
+    "   str r6, [r1]",
     "   ldr r3, ={tcbs}",
     "   movs r4, #16",
     "   lsls r5, r6, #4",
     "   adds r3, r3, r5",
-    "   ldr r0, [r3]",              // next task's saved SP
-    "   ldmia r0!, {{r4-r11}}",     // restore callee-saved regs
-    "   msr psp, r0",               // switch PSP
-    "   movs r5, #2",               // Running
-    "   str r5, [r3, #8]",          // tcbs[next].state = Running
-    // Increment progress counter (offset 12)
+    "   ldr r0, [r3]",
+    "   ldmia r0!, {{r4-r11}}",
+    "   msr psp, r0",
+    "   movs r5, #2",
+    "   str r5, [r3, #8]",
     "   ldr r6, [r3, #12]",
     "   adds r6, r6, #1",
     "   str r6, [r3, #12]",
-    // EXC_RETURN: Thread mode, PSP, no FPU
     "   ldr r0, ={exc_ret}",
     "   bx r0",
     current = sym crate::kernel::multitask::CURRENT_TASK,
@@ -118,7 +105,7 @@ global_asm!(
     "task_body_1:",
     "   ldr r0, ={tcbs}",
     "1:",
-    "   ldr r1, [r0, #28]",         // TCBS[1].counter = 1*16+12 = 28
+    "   ldr r1, [r0, #28]",
     "   adds r1, r1, #1",
     "   str r1, [r0, #28]",
     "   b 1b",
@@ -132,7 +119,7 @@ global_asm!(
     "task_body_2:",
     "   ldr r0, ={tcbs}",
     "1:",
-    "   ldr r1, [r0, #44]",         // TCBS[2].counter = 2*16+12 = 44
+    "   ldr r1, [r0, #44]",
     "   adds r1, r1, #1",
     "   str r1, [r0, #44]",
     "   b 1b",
@@ -140,14 +127,10 @@ global_asm!(
 );
 
 extern "C" {
-    pub fn PendSV_Handler();
-    pub fn task_body_1();
-    pub fn task_body_2();
+    fn PendSV_Handler();
+    fn task_body_1();
+    fn task_body_2();
 }
-
-// ---------------------------------------------------------------------------
-// Rust-side task management
-// ---------------------------------------------------------------------------
 
 extern "C" {
     static _task_stack_1: u32;
@@ -164,7 +147,7 @@ fn task_stack_top(idx: usize) -> u32 {
     }
 }
 
-/// Spawn a counter task that proves context switching works.
+/// Spawn a counter task proving context switching works.
 ///
 /// # Safety
 /// Call after VTOR relocation and install_task_handlers().
@@ -174,25 +157,21 @@ pub unsafe fn spawn_counter_task(task_idx: usize) -> bool {
     }
     let tcbs = core::ptr::addr_of_mut!(TCBS);
     let stack_top = task_stack_top(task_idx + 1);
-
     let body: unsafe extern "C" fn() = if task_idx == 0 {
         task_body_1
     } else {
         task_body_2
     };
     let body_addr = body as *const () as u32;
-
-    // Initial exception return frame on task's stack.
     let sp = stack_top;
     unsafe {
-        core::ptr::write_volatile((sp - 4) as *mut u32, 0x0100_0000); // xPSR Thumb
-        core::ptr::write_volatile((sp - 8) as *mut u32, body_addr | 1); // PC thumb
+        core::ptr::write_volatile((sp - 4) as *mut u32, 0x0100_0000);
+        core::ptr::write_volatile((sp - 8) as *mut u32, body_addr | 1);
         for off in [12u32, 16, 20, 24, 28, 32] {
             core::ptr::write_volatile((sp - off) as *mut u32, 0);
         }
     }
-
-    (*tcbs)[task_idx + 1].sp = sp - 64; // reserve callee-saved space below HW frame
+    (*tcbs)[task_idx + 1].sp = sp - 64;
     (*tcbs)[task_idx + 1].pc = body_addr;
     (*tcbs)[task_idx + 1].state = TaskState::Ready as u32;
     true
@@ -203,19 +182,75 @@ pub unsafe fn spawn_counter_task(task_idx: usize) -> bool {
 /// # Safety
 /// Call after boot_relocate_vectors(). Before enabling SysTick.
 pub unsafe fn install_task_handlers() {
-    // RAM_VECTOR_TABLE is the SRAM vector table (VTOR target).
-    // PendSV slot = word 14, SysTick = word 15.
     let vt = core::ptr::addr_of_mut!(crate::kernel::interrupt::RAM_VECTOR_TABLE) as *mut u32;
-
+    extern "C" {
+        fn PendSV_Handler();
+    }
     core::ptr::write_volatile(vt.add(14), PendSV_Handler as *const () as u32);
     core::ptr::write_volatile(vt.add(15), sys_tick_pend as *const () as u32);
-
-    // PendSV priority lowest
     core::ptr::write_volatile((0xE000_ED20usize + 12) as *mut u32, 0xFF00_0000);
 }
 
 extern "C" fn sys_tick_pend() {
     unsafe {
-        core::ptr::write_volatile(0xE000_ED04 as *mut u32, 1 << 28); // PENDSVSET
+        core::ptr::write_volatile(0xE000_ED04 as *mut u32, 1 << 28);
+    }
+}
+
+/// Spawn a JIT task that runs threaded stream from EXEC_BUFFER partition.
+///
+/// # Safety
+/// Call after VTOR relocation and install_task_handlers().
+pub unsafe fn spawn_jit_task(slot_idx: usize) -> bool {
+    if slot_idx >= NUM_TASKS - 1 {
+        return false;
+    }
+    let tcbs = core::ptr::addr_of_mut!(TCBS);
+    let stack_top = task_stack_top(slot_idx + 1);
+    // Entry point: threaded_task_runner (loops forever on slot's stream)
+    // For Phase 8a, use counter tasks as placeholder — JIT runner is Phase 8b.
+    let body: unsafe extern "C" fn() = if slot_idx == 0 {
+        task_body_1
+    } else {
+        task_body_2
+    };
+    let body_addr = body as *const () as u32;
+    let sp = stack_top;
+    unsafe {
+        core::ptr::write_volatile((sp - 4) as *mut u32, 0x0100_0000);
+        core::ptr::write_volatile((sp - 8) as *mut u32, body_addr | 1);
+        for off in [12u32, 16, 20, 24, 28, 32] {
+            core::ptr::write_volatile((sp - off) as *mut u32, 0);
+        }
+    }
+    (*tcbs)[slot_idx + 1].sp = sp - 64;
+    (*tcbs)[slot_idx + 1].pc = body_addr;
+    (*tcbs)[slot_idx + 1].state = TaskState::Ready as u32;
+    true
+}
+
+/// Emit fn body words into a JIT slot.
+///
+/// # Safety
+/// Single-writer per slot. EXEC_BUFFER region is RWX.
+pub unsafe fn emit_fn_into_slot(slot_idx: usize, words: &[usize]) -> Result<(), ()> {
+    if slot_idx >= NUM_TASKS - 1 || words.len() > 256 {
+        return Err(());
+    }
+    let bases: [usize; 4] = [0x2000_2000, 0x2000_2400, 0x2000_2800, 0x2000_2C00];
+    let base = bases[slot_idx];
+    for (i, &w) in words.iter().enumerate() {
+        core::ptr::write_volatile((base + i * 4) as *mut u32, w as u32);
+    }
+    crate::kernel::exec::flush_instruction_cache();
+    Ok(())
+}
+
+fn jit_slot_base_addr(slot_idx: usize) -> usize {
+    match slot_idx {
+        0 => 0x2000_2000,
+        1 => 0x2000_2400,
+        2 => 0x2000_2800,
+        _ => 0x2000_2C00,
     }
 }

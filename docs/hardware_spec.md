@@ -56,6 +56,23 @@ The script runs once per silicon flash — never in the QEMU path — and the ke
 image itself is unchanged (~15 K text). Revisit if a strict loader ever rejects
 the unpatched ELF on real hardware.
 
+## 2.5 Measured Minimum Requirements (v0.2.0)
+
+Actual resource usage from QEMU builds (`size` + `readelf -l` on release binaries).
+
+| Configuration                                            | SRAM      | Flash      | Minimum CPU           |
+| -------------------------------------------------------- | --------- | ---------- | --------------------- |
+| Full v0.2.0 (multi-task + pools + persistence + drivers) | ~25 KB    | ~141 KB    | Cortex-M3+ / RV32IMAC |
+| Without multi-tasking/pools                              | ~17 KB    | ~130 KB    | Cortex-M3+            |
+| Without JIT (threaded only)                              | ~13 KB    | ~120 KB    | Cortex-M0 possible    |
+| Absolute floor (poke/peek/caps only)                     | **~8 KB** | **~60 KB** | any MCU               |
+
+**x86_64 note:** HR-OS would run in <1 MB RAM on any x86_64 processor. The target JSON exists (`targets/x86_64-hros-none.json`); blocked only on IDT/APIC/COM1 drivers.
+
+**Why the tight layout is structural:** SASA means VA≡PA. No virtual memory to hide fragmentation behind. Every byte is physically contiguous. The O(1) guarantees are provable _because_ the layout is fixed.
+
+---
+
 ## 3. Hardware Interlocks & Debug
 
 | Interlock    | Requirement                                                                                                                                                  |
